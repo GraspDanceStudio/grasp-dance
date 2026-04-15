@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>会員証</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .card {
+      background: #fff;
+      width: 90%;
+      max-width: 400px;
+      border-radius: 20px;
+      padding: 30px 20px;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      box-sizing: border-box;
+    }
+
+    .title {
+      font-size: 28px;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+
+    .name {
+      font-size: 22px;
+      margin-bottom: 10px;
+    }
+
+    .member {
+      font-size: 18px;
+      margin-bottom: 20px;
+      color: #666;
+    }
+
+    .qr {
+      margin: 20px 0;
+    }
+
+    .qr img {
+      width: 220px;
+      height: 220px;
+      background: #fff;
+      border: 1px solid #eee;
+    }
+
+    .note {
+      font-size: 14px;
+      color: #999;
+      margin-top: 15px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="title">会員証</div>
+  <div class="name" id="name">会員</div>
+  <div class="member" id="member">No.----</div>
+
+  <div class="qr">
+    <img id="qrImg" alt="QRコード">
+  </div>
+</div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const member = params.get("member") || "000000";
+
+  document.getElementById("member").textContent = "No." + member;
+  document.getElementById("name").textContent = "会員";
+
+  const qrText =
+    "https://liff.line.me/2008912129-TQRCpL9d?member=" + encodeURIComponent(member);
+
+  const qrUrl =
+    "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" +
+    encodeURIComponent(qrText);
+
+  const qrImg = document.getElementById("qrImg");
+  qrImg.src = qrUrl;
+
+  qrImg.onerror = function () {
+    alert("QRコードの読み込みに失敗しました");
+  };
+</script>
+
+</body>
+</html>
