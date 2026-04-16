@@ -8,58 +8,70 @@
 
 <style>
 body {
+  margin: 0;
   font-family: sans-serif;
-  background: #f5f5f5;
+  background: #ffffff;
   display: flex;
   justify-content: center;
   align-items: center;
   height: 100vh;
-  margin: 0;
 }
 
-/* カード本体 */
+/* カード */
 .card {
-  width: 90%;
-  max-width: 380px;
-  background: white;
-  border-radius: 20px;
-  padding: 24px 20px 28px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+  width: 100%;
+  max-width: 420px;
+  height: 100vh;
+  box-sizing: border-box;
+  padding: 20px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   text-align: center;
 }
 
-/* タイトル */
-.title {
-  font-size: 20px;
-  font-weight: bold;
-  margin-bottom: 12px;
-  color: #666;
+/* 上エリア */
+.top {
+  margin-top: 10px;
 }
 
-/* 名前 */
+.title {
+  font-size: 16px;
+  color: #888;
+  margin-bottom: 6px;
+}
+
 .name {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 800;
   margin-bottom: 6px;
 }
 
-/* 会員番号 */
 .number {
   font-size: 16px;
   color: #666;
-  margin-bottom: 18px;
 }
 
 /* QR */
-#qrcode {
-  margin: 0 auto 18px;
+.qr-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* 補足 */
+#qrcode canvas {
+  width: 85vw !important;
+  max-width: 320px;
+  height: auto !important;
+}
+
+/* 下エリア */
 .note {
   font-size: 13px;
-  color: #888;
+  color: #777;
   line-height: 1.5;
+  margin-bottom: 8px;
 }
 </style>
 </head>
@@ -67,24 +79,29 @@ body {
 <body>
 
 <div class="card">
-  <div class="title">MEMBER CARD</div>
 
-  <div id="memberName" class="name"></div>
-  <div id="memberNumber" class="number"></div>
+  <div class="top">
+    <div class="title">MEMBER CARD</div>
+    <div id="memberName" class="name"></div>
+    <div id="memberNumber" class="number"></div>
+  </div>
 
-  <div id="qrcode"></div>
+  <div class="qr-wrap">
+    <div id="qrcode"></div>
+  </div>
 
   <div class="note">
-    受付時にこのQRコードをご提示ください<br>
+    受付時にQRコードをご提示ください<br>
     スクリーンショットでも利用可能です
   </div>
+
 </div>
 
 <script>
 const params = new URLSearchParams(window.location.search);
 
 const member = params.get("member") || "";
-const name = params.get("name") || "";
+const name = decodeURIComponent(params.get("name") || "");
 
 // 表示
 document.getElementById("memberName").textContent = name || "GUEST";
@@ -95,8 +112,8 @@ const qrText =
   "https://liff.line.me/2008912129-TQRCpL9d?member=" +
   encodeURIComponent(member);
 
-// QR生成
-QRCode.toCanvas(qrText, { width: 220 }, function (err, canvas) {
+// QR生成（大きめ）
+QRCode.toCanvas(qrText, { width: 320 }, function (err, canvas) {
   if (!err) {
     document.getElementById("qrcode").appendChild(canvas);
   }
