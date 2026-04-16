@@ -10,13 +10,18 @@
 body {
   margin: 0;
   font-family: sans-serif;
-  background: #0f1115;
+  height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
-}
 
+  /* 背景グラデーション */
+  background:
+    radial-gradient(circle at 20% 30%, rgba(100,100,255,0.25), transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(255,100,200,0.2), transparent 40%),
+    linear-gradient(135deg, #0a0c10, #1a1d24);
+}
+  
 /* 全体 */
 .wrapper {
   width: 92%;
