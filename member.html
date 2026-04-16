@@ -8,63 +8,69 @@
 
 <style>
 body {
+  margin: 0;
   font-family: sans-serif;
-  background: #f3f4f6;
+  background: #0f1115;
   display: flex;
   justify-content: center;
   align-items: center;
   height: 100vh;
-  margin: 0;
 }
 
-/* カード */
-.card {
-  width: 94%;
+/* 全体 */
+.wrapper {
+  width: 92%;
   max-width: 420px;
-  background: white;
+}
+
+/* カード共通 */
+.card {
+  background: linear-gradient(145deg, #1a1d24, #111318);
   border-radius: 22px;
-  padding: 28px 20px 26px;
-  box-shadow: 0 12px 30px rgba(0,0,0,0.18);
+  padding: 24px 20px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+  color: #fff;
+}
+
+/* 上カード */
+.top-card {
+  margin-bottom: 18px;
   text-align: center;
 }
 
-/* タイトル */
-.title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #777;
-  margin-bottom: 12px;
+.studio {
+  font-size: 14px;
+  color: #aaa;
+  margin-bottom: 8px;
+  line-height: 1.4;
 }
 
-/* 名前 */
 .name {
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 800;
   margin-bottom: 6px;
 }
 
-/* 会員番号 */
 .number {
-  font-size: 16px;
-  color: #666;
-  margin-bottom: 20px;
+  font-size: 14px;
+  color: #bbb;
 }
 
-/* QR */
-#qrcode {
-  margin: 0 auto 20px;
+/* 下カード */
+.qr-card {
+  text-align: center;
+  padding: 28px 20px;
 }
 
-/* QRサイズ強制 */
 #qrcode canvas {
   width: 260px !important;
   height: auto !important;
+  margin-bottom: 14px;
 }
 
-/* 補足 */
 .note {
-  font-size: 13px;
-  color: #777;
+  font-size: 12px;
+  color: #aaa;
   line-height: 1.5;
 }
 </style>
@@ -72,18 +78,29 @@ body {
 
 <body>
 
-<div class="card">
-  <div class="title">MEMBER CARD</div>
+<div class="wrapper">
 
-  <div id="memberName" class="name"></div>
-  <div id="memberNumber" class="number"></div>
+  <!-- 上カード -->
+  <div class="card top-card">
+    <div class="studio">
+      GRASP＆K×G DANCE STUDIO<br>
+      members card
+    </div>
 
-  <div id="qrcode"></div>
-
-  <div class="note">
-    受付時にQRコードをご提示ください<br>
-    スクリーンショットでも利用可能です
+    <div id="memberName" class="name"></div>
+    <div id="memberNumber" class="number"></div>
   </div>
+
+  <!-- 下カード -->
+  <div class="card qr-card">
+    <div id="qrcode"></div>
+
+    <div class="note">
+      受付時にQRコードをご提示ください<br>
+      スクリーンショットでも利用可能です
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -101,7 +118,7 @@ const qrText =
   "https://liff.line.me/2008912129-TQRCpL9d?member=" +
   encodeURIComponent(member);
 
-// QR生成（少し大きめ）
+// QR生成
 QRCode.toCanvas(qrText, { width: 300 }, function (err, canvas) {
   if (!err) {
     document.getElementById("qrcode").appendChild(canvas);
