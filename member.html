@@ -1,99 +1,106 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>会員証</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      margin: 0;
-      font-family: sans-serif;
-      background: #f5f5f5;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-    }
+<meta charset="UTF-8">
+<title>会員証</title>
 
-    .card {
-      background: #fff;
-      width: 90%;
-      max-width: 400px;
-      border-radius: 20px;
-      padding: 30px 20px;
-      text-align: center;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-      box-sizing: border-box;
-    }
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 
-    .title {
-      font-size: 28px;
-      font-weight: bold;
-      margin-bottom: 20px;
-    }
+<style>
+body {
+  font-family: sans-serif;
+  background: #f5f5f5;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+}
 
-    .name {
-      font-size: 22px;
-      margin-bottom: 10px;
-    }
+/* カード本体 */
+.card {
+  width: 90%;
+  max-width: 380px;
+  background: white;
+  border-radius: 20px;
+  padding: 24px 20px 28px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+  text-align: center;
+}
 
-    .member {
-      font-size: 18px;
-      margin-bottom: 20px;
-      color: #666;
-    }
+/* タイトル */
+.title {
+  font-size: 20px;
+  font-weight: bold;
+  margin-bottom: 12px;
+  color: #666;
+}
 
-    .qr {
-      margin: 20px 0;
-    }
+/* 名前 */
+.name {
+  font-size: 28px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
 
-    .qr img {
-      width: 220px;
-      height: 220px;
-      background: #fff;
-      border: 1px solid #eee;
-    }
+/* 会員番号 */
+.number {
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 18px;
+}
 
-    .note {
-      font-size: 14px;
-      color: #999;
-      margin-top: 15px;
-      line-height: 1.6;
-    }
-  </style>
+/* QR */
+#qrcode {
+  margin: 0 auto 18px;
+}
+
+/* 補足 */
+.note {
+  font-size: 13px;
+  color: #888;
+  line-height: 1.5;
+}
+</style>
 </head>
+
 <body>
 
 <div class="card">
-  <div class="title">会員証</div>
-  <div class="name" id="name">会員</div>
-  <div class="member" id="member">No.----</div>
+  <div class="title">MEMBER CARD</div>
 
-  <div class="qr">
-    <img id="qrImg" alt="QRコード">
+  <div id="memberName" class="name"></div>
+  <div id="memberNumber" class="number"></div>
+
+  <div id="qrcode"></div>
+
+  <div class="note">
+    受付時にこのQRコードをご提示ください<br>
+    スクリーンショットでも利用可能です
   </div>
 </div>
 
 <script>
-  const params = new URLSearchParams(location.search);
-  const member = params.get("member") || "000000";
+const params = new URLSearchParams(window.location.search);
 
-  document.getElementById("member").textContent = "No." + member;
-  document.getElementById("name").textContent = "会員";
+const member = params.get("member") || "";
+const name = params.get("name") || "";
 
-  const qrText =
-    "https://liff.line.me/2008912129-TQRCpL9d?member=" + encodeURIComponent(member);
+// 表示
+document.getElementById("memberName").textContent = name || "GUEST";
+document.getElementById("memberNumber").textContent = member;
 
-  const qrUrl =
-    "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" +
-    encodeURIComponent(qrText);
+// QRの中身（LIFF）
+const qrText =
+  "https://liff.line.me/2008912129-TQRCpL9d?member=" +
+  encodeURIComponent(member);
 
-  const qrImg = document.getElementById("qrImg");
-  qrImg.src = qrUrl;
-
-  qrImg.onerror = function () {
-    alert("QRコードの読み込みに失敗しました");
-  };
+// QR生成
+QRCode.toCanvas(qrText, { width: 220 }, function (err, canvas) {
+  if (!err) {
+    document.getElementById("qrcode").appendChild(canvas);
+  }
+});
 </script>
 
 </body>
