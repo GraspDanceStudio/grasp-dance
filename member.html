@@ -19,23 +19,23 @@ body {
 
   background:
     linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)),
-    url('グラスプ.jpg') center/cover no-repeat;
+    url('grasp-bg.jpg') center/cover no-repeat;
 }
 
 /* 全体 */
 .wrapper {
-  width: 92%;
-  max-width: 420px;
+  width: 96%;
+  max-width: 460px;
   position: relative;
   z-index: 1;
 }
 
 /* カード共通 */
 .card {
-  background: rgba(20, 24, 30, 0.45);
+  background: rgba(20, 24, 30, 0.6);
   border: 1px solid rgba(255,255,255,0.14);
   border-radius: 22px;
-  padding: 24px 20px;
+  padding: 28px 24px;
   box-shadow: 0 12px 30px rgba(0,0,0,0.45);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -46,6 +46,7 @@ body {
 .top-card {
   margin-bottom: 18px;
   text-align: center;
+  padding: 32px 24px;
 }
 
 .studio {
@@ -72,7 +73,7 @@ body {
 /* 下カード */
 .qr-card {
   text-align: center;
-  padding: 28px 20px;
+  padding: 32px 24px;
 }
 
 #qrcode {
@@ -80,7 +81,7 @@ body {
 }
 
 #qrcode canvas {
-  width: 260px !important;
+  width: 300px !important;
   height: auto !important;
   background: #fff;
   padding: 10px;
@@ -94,10 +95,10 @@ body {
   line-height: 1.6;
 }
 
-/* スマホで少しだけ大きめ */
+/* スマホ */
 @media (max-width: 480px) {
   .wrapper {
-    width: 94%;
+    width: 96%;
   }
 
   .name {
@@ -105,7 +106,7 @@ body {
   }
 
   #qrcode canvas {
-    width: 250px !important;
+    width: 280px !important;
   }
 }
 </style>
@@ -152,7 +153,7 @@ const qrText =
   encodeURIComponent(member);
 
 // QR生成
-QRCode.toCanvas(qrText, { width: 300 }, function (err, canvas) {
+QRCode.toCanvas(qrText, { width: 340 }, function (err, canvas) {
   if (!err) {
     document.getElementById("qrcode").appendChild(canvas);
   }
