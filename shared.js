@@ -460,6 +460,7 @@
   // 重複チェック
   // 受講ログ_ を直接参照
   // B:番号 / C:クラス名 / D:日付(YYYY-MM-DD)
+  // ※ B列の型ブレ対策として、当日分を取得してJS側で会員番号比較
   // =========================================================
 
   function getDuplicateCacheKey(member, date){
@@ -474,9 +475,8 @@
     if(!cleanMember) return duplicateSet;
 
     const tq = [
-      "select C",
-      "where B = '" + escapeForGvizString(cleanMember) + "'",
-      "and D = '" + escapeForGvizString(today) + "'"
+      "select B,C,D",
+      "where D = '" + escapeForGvizString(today) + "'"
     ].join(" ");
 
     const url =
@@ -493,10 +493,15 @@
       const rows = json.table?.rows || [];
 
       for(const r of rows){
-        const cls = normalizeClassName(r.c?.[0]?.v || r.c?.[0]?.f || "");
-        if(cls){
-          duplicateSet.add(cls);
-        }
+        const sheetMember = window.normalizeMember(r.c?.[0]?.v || r.c?.[0]?.f || "");
+        const cls = normalizeClassName(r.c?.[1]?.v || r.c?.[1]?.f || "");
+        const date = normalizeSheetDateCell(r.c?.[2]?.v ?? r.c?.[2]?.f ?? "");
+
+        if(sheetMember !== cleanMember) continue;
+        if(date !== today) continue;
+        if(!cls) continue;
+
+        duplicateSet.add(cls);
       }
 
       return duplicateSet;
