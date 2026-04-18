@@ -1025,4 +1025,13 @@
     return duplicates.includes(normalizeClassName(className));
   };
 
-})();
+
+setTimeout(() => {
+  if(window.currentMember){
+    window.debugCheck(window.currentMember);
+  }else{
+    console.log("currentMember not found");
+  }
+}, 1000);
+
+  })();
