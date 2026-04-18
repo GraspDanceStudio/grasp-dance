@@ -937,7 +937,7 @@
 
     setTimeout(() => {
       complete.style.display = "none";
-    }, 5000);
+    }, 3000);
   };
 
   // ===== 受講数取得 =====
