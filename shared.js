@@ -91,7 +91,7 @@
       .replaceAll("'","&#039;");
   };
 
-  // ===== 会員番号整形（数字のみ） =====
+  // ===== 会員番号整形（英数字 + - _ 対応） =====
   window.normalizeMember = function(value){
     let s = String(value || "").trim();
 
@@ -108,13 +108,36 @@
 
     s = s.split("?")[0].trim();
 
-    s = s.replace(/[０-９]/g, ch =>
+    s = s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, ch =>
       String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
     );
 
-    s = s.replace(/[^0-9]/g, "");
+    s = s.replace(/[^A-Za-z0-9\-_]/g, "");
+    s = s.toUpperCase();
+
     return s;
   };
+
+  // ===== 会員番号比較 =====
+  function isNumericMemberId(value){
+    return /^[0-9]+$/.test(String(value || ""));
+  }
+
+  function isSameMemberId(a, b){
+    const aa = window.normalizeMember(a);
+    const bb = window.normalizeMember(b);
+
+    if(!aa || !bb) return false;
+
+    const aIsNum = isNumericMemberId(aa);
+    const bIsNum = isNumericMemberId(bb);
+
+    if(aIsNum && bIsNum){
+      return Number(aa) === Number(bb);
+    }
+
+    return aa === bb;
+  }
 
   // ===== クラス名整形 =====
   function normalizeClassName(value){
@@ -443,7 +466,8 @@
 
   // =========================================================
   // 重複チェック
-  // 先頭ゼロ対策: 会員番号は数値比較
+  // 数字のみ同士 → 数値比較
+  // 英字/ハイフン入り → 文字列比較
   // =========================================================
 
   function getDuplicateCacheKey(member, date){
@@ -475,8 +499,6 @@
       const json = parseGvizJson(text);
       const rows = json.table?.rows || [];
 
-      const targetMemberNum = Number(cleanMember);
-
       for(const r of rows){
         const rawMember = r.c?.[0]?.v ?? r.c?.[0]?.f ?? "";
         const cls = normalizeClassName(r.c?.[1]?.v || r.c?.[1]?.f || "");
@@ -484,10 +506,7 @@
 
         if(!cls) continue;
         if(date !== today) continue;
-
-        const rowMemberNum = Number(String(rawMember).trim());
-        if(Number.isNaN(rowMemberNum)) continue;
-        if(rowMemberNum !== targetMemberNum) continue;
+        if(!isSameMemberId(rawMember, cleanMember)) continue;
 
         duplicateSet.add(cls);
       }
