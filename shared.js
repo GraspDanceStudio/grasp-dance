@@ -7,10 +7,21 @@
       "https://docs.google.com/forms/d/e/1FAIpQLSfZeKs2ZPJ0iIOxg6L7UZUr7fUmZy-E5OwA7aq93Uu7VaysBA/formResponse",
     ENTRY_MEMBER: "entry.71375240",
     ENTRY_CLASS: "entry.403922703",
+
+    // スプレッドシート
     SPREADSHEET_ID: "1z7xSOOjsXyuQn5p9aE3tl5fgzIMkxoLKVnnpTYUTS9k",
+
+    // 受講ログ_（重複チェック元）
+    // A:タイムスタンプ / B:番号 / C:クラス名 / D:日付(YYYY-MM-DD テキスト)
     DUPLICATE_GID: "969068048",
+
+    // 照会用
     COUNT_GID: "218311726",
-    DUPLICATE_CACHE_MS: 15000,
+
+    // キャッシュ
+    DUPLICATE_CACHE_MS: 10000,
+
+    // ローカル仮押さえ保持
     LOCAL_PENDING_MINUTES: 10
   };
 
@@ -28,12 +39,8 @@
   };
 
   // ===== 内部キャッシュ =====
-  let duplicateCache = {
-    date: "",
-    rows: null,
-    promise: null,
-    fetchedAt: 0
-  };
+  // member + today ごとに重複クラス一覧を持つ
+  let duplicateCacheMap = {};
 
   // ===== 東京の今日文字列 =====
   window.getTokyoTodayString = function(){
@@ -53,6 +60,23 @@
 
     return `${map.year}-${map.month}-${map.day}`;
   };
+
+  // ===== 東京の今年 =====
+  function getTokyoYear(){
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric"
+    }).formatToParts(new Date());
+
+    const map = {};
+    parts.forEach(p => {
+      if(p.type !== "literal"){
+        map[p.type] = p.value;
+      }
+    });
+
+    return map.year || String(new Date().getFullYear());
+  }
 
   // ===== 今日の曜日 =====
   window.getTokyoWeekdayLabel = function(){
@@ -114,14 +138,87 @@
       .trim();
   }
 
-  // ===== ローカル受付中キー =====
+  // ===== gviz用シングルクォートエスケープ =====
+  function escapeForGvizString(value){
+    return String(value || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  }
+
+  // ===== gvizレスポンスをJSON化 =====
+  function parseGvizJson(text){
+    return JSON.parse(
+      text.replace("/*O_o*/","")
+          .replace("google.visualization.Query.setResponse(","")
+          .slice(0,-2)
+    );
+  }
+
+  // ===== セル値の日付を YYYY-MM-DD 化 =====
+  function normalizeSheetDateCell(cellValue){
+    if(cellValue == null) return "";
+
+    if(cellValue instanceof Date){
+      return (
+        cellValue.getFullYear() + "-" +
+        String(cellValue.getMonth() + 1).padStart(2, "0") + "-" +
+        String(cellValue.getDate()).padStart(2, "0")
+      );
+    }
+
+    let s = String(cellValue).trim();
+    if(!s) return "";
+
+    s = s.replace(/\s+/g, " ");
+    s = s.replace(/年/g, "-").replace(/月/g, "-").replace(/日/g, "");
+    s = s.replace(/\./g, "/");
+
+    const m1 = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})(?:\s.*)?$/);
+    if(m1){
+      return (
+        m1[1] + "-" +
+        String(m1[2]).padStart(2, "0") + "-" +
+        String(m1[3]).padStart(2, "0")
+      );
+    }
+
+    const m2 = s.match(/^(\d{1,2})[-\/](\d{1,2})(?:\s.*)?$/);
+    if(m2){
+      const todayYear = getTokyoYear();
+      return (
+        todayYear + "-" +
+        String(m2[1]).padStart(2, "0") + "-" +
+        String(m2[2]).padStart(2, "0")
+      );
+    }
+
+    const m3 = s.match(/^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2})/);
+    if(m3){
+      return (
+        m3[1] + "-" +
+        String(Number(m3[2]) + 1).padStart(2, "0") + "-" +
+        String(m3[3]).padStart(2, "0")
+      );
+    }
+
+    return s;
+  }
+
+  // =========================================================
+  // ローカル保存
+  // pending: 送信中・未確定
+  // confirmed: 送信成功済み（当日中）
+  // =========================================================
+
   function getLocalPendingStorageKey(){
     return "danceStudioPendingReceipts";
   }
 
-  function readLocalPendingMap(){
+  function getLocalConfirmedStorageKey(){
+    return "danceStudioConfirmedReceipts";
+  }
+
+  function readJsonStorage(key){
     try{
-      const raw = localStorage.getItem(getLocalPendingStorageKey());
+      const raw = localStorage.getItem(key);
       const obj = raw ? JSON.parse(raw) : {};
       return obj && typeof obj === "object" ? obj : {};
     }catch(e){
@@ -129,18 +226,18 @@
     }
   }
 
-  function writeLocalPendingMap(map){
+  function writeJsonStorage(key, map){
     try{
-      localStorage.setItem(getLocalPendingStorageKey(), JSON.stringify(map));
+      localStorage.setItem(key, JSON.stringify(map));
     }catch(e){}
   }
 
-  function getLocalPendingKey(member, date){
+  function getLocalReceiptKey(member, date){
     return `${date}__${member}`;
   }
 
   function cleanupLocalPending(){
-    const map = readLocalPendingMap();
+    const map = readJsonStorage(getLocalPendingStorageKey());
     const now = Date.now();
     let changed = false;
 
@@ -162,7 +259,26 @@
     });
 
     if(changed){
-      writeLocalPendingMap(map);
+      writeJsonStorage(getLocalPendingStorageKey(), map);
+    }
+
+    return map;
+  }
+
+  function cleanupLocalConfirmed(){
+    const map = readJsonStorage(getLocalConfirmedStorageKey());
+    const today = window.getTokyoTodayString();
+    let changed = false;
+
+    Object.keys(map).forEach(key => {
+      if(!key.startsWith(today + "__")){
+        delete map[key];
+        changed = true;
+      }
+    });
+
+    if(changed){
+      writeJsonStorage(getLocalConfirmedStorageKey(), map);
     }
 
     return map;
@@ -172,7 +288,16 @@
     const cleanMember = window.normalizeMember(member);
     const today = window.getTokyoTodayString();
     const map = cleanupLocalPending();
-    const key = getLocalPendingKey(cleanMember, today);
+    const key = getLocalReceiptKey(cleanMember, today);
+    const arr = Array.isArray(map[key]) ? map[key] : [];
+    return new Set(arr.map(item => normalizeClassName(item.className)));
+  }
+
+  function getLocalConfirmedClassSet(member){
+    const cleanMember = window.normalizeMember(member);
+    const today = window.getTokyoTodayString();
+    const map = cleanupLocalConfirmed();
+    const key = getLocalReceiptKey(cleanMember, today);
     const arr = Array.isArray(map[key]) ? map[key] : [];
     return new Set(arr.map(item => normalizeClassName(item.className)));
   }
@@ -181,7 +306,7 @@
     const cleanMember = window.normalizeMember(member);
     const today = window.getTokyoTodayString();
     const map = cleanupLocalPending();
-    const key = getLocalPendingKey(cleanMember, today);
+    const key = getLocalReceiptKey(cleanMember, today);
     const now = Date.now();
     const expiresAt = now + Number(window.APP_CONFIG.LOCAL_PENDING_MINUTES || 10) * 60 * 1000;
 
@@ -207,7 +332,59 @@
     });
 
     map[key] = Array.from(byClass.values());
-    writeLocalPendingMap(map);
+    writeJsonStorage(getLocalPendingStorageKey(), map);
+  }
+
+  function removeLocalPendingClasses(member, classNames){
+    const cleanMember = window.normalizeMember(member);
+    const today = window.getTokyoTodayString();
+    const map = cleanupLocalPending();
+    const key = getLocalReceiptKey(cleanMember, today);
+    const arr = Array.isArray(map[key]) ? map[key] : [];
+    const removeSet = new Set((classNames || []).map(c => normalizeClassName(c)));
+
+    const filtered = arr.filter(item => {
+      return !removeSet.has(normalizeClassName(item.className));
+    });
+
+    if(filtered.length > 0){
+      map[key] = filtered;
+    }else{
+      delete map[key];
+    }
+
+    writeJsonStorage(getLocalPendingStorageKey(), map);
+  }
+
+  function addLocalConfirmedClasses(member, classNames){
+    const cleanMember = window.normalizeMember(member);
+    const today = window.getTokyoTodayString();
+    const map = cleanupLocalConfirmed();
+    const key = getLocalReceiptKey(cleanMember, today);
+    const current = Array.isArray(map[key]) ? map[key] : [];
+    const byClass = new Map();
+
+    current.forEach(cls => {
+      const normalized = normalizeClassName(cls);
+      if(normalized){
+        byClass.set(normalized, normalized);
+      }
+    });
+
+    (classNames || []).forEach(cls => {
+      const normalized = normalizeClassName(cls);
+      if(normalized){
+        byClass.set(normalized, normalized);
+      }
+    });
+
+    map[key] = Array.from(byClass.values());
+    writeJsonStorage(getLocalConfirmedStorageKey(), map);
+  }
+
+  function promotePendingToConfirmed(member, classNames){
+    addLocalConfirmedClasses(member, classNames);
+    removeLocalPendingClasses(member, classNames);
   }
 
   // ===== 曜日ボタン =====
@@ -280,179 +457,134 @@
     });
   };
 
-  // ===== gvizレスポンスをJSON化 =====
-  function parseGvizJson(text){
-    return JSON.parse(
-      text.replace("/*O_o*/","")
-          .replace("google.visualization.Query.setResponse(","")
-          .slice(0,-2)
-    );
+  // =========================================================
+  // 重複チェック
+  // 受講ログ_ を直接参照
+  // B:番号 / C:クラス名 / D:日付(YYYY-MM-DD)
+  // =========================================================
+
+  function getDuplicateCacheKey(member, date){
+    return `${date}__${member}`;
   }
 
-  // ===== セル値の日付を YYYY-MM-DD 化 =====
-  function normalizeSheetDateCell(cellValue){
-    if(cellValue == null) return "";
-
-    if(cellValue instanceof Date){
-      return (
-        cellValue.getFullYear() + "-" +
-        String(cellValue.getMonth() + 1).padStart(2, "0") + "-" +
-        String(cellValue.getDate()).padStart(2, "0")
-      );
-    }
-
-    let s = String(cellValue).trim();
-    if(!s) return "";
-
-    s = s.replace(/\s+/g, " ");
-    s = s.replace(/年/g, "-").replace(/月/g, "-").replace(/日/g, "");
-    s = s.replace(/\./g, "/");
-
-    const m1 = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})(?:\s.*)?$/);
-    if(m1){
-      return (
-        m1[1] + "-" +
-        String(m1[2]).padStart(2, "0") + "-" +
-        String(m1[3]).padStart(2, "0")
-      );
-    }
-
-    const m2 = s.match(/^(\d{1,2})[-\/](\d{1,2})(?:\s.*)?$/);
-    if(m2){
-      const todayYear = new Date().getFullYear();
-      return (
-        todayYear + "-" +
-        String(m2[1]).padStart(2, "0") + "-" +
-        String(m2[2]).padStart(2, "0")
-      );
-    }
-
-    const m3 = s.match(/^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2})/);
-    if(m3){
-      return (
-        m3[1] + "-" +
-        String(Number(m3[2]) + 1).padStart(2, "0") + "-" +
-        String(m3[3]).padStart(2, "0")
-      );
-    }
-
-    return s;
-  }
-
-  // ===== 今日の重複チェック用行データ取得（キャッシュあり） =====
-  async function getTodayDuplicateRows(){
-    const today = window.getTokyoTodayString();
-    const now = Date.now();
-    const cacheMs = Number(window.APP_CONFIG.DUPLICATE_CACHE_MS || 0);
-
-    if(duplicateCache.date !== today){
-      duplicateCache = {
-        date: today,
-        rows: null,
-        promise: null,
-        fetchedAt: 0
-      };
-    }
-
-    if(
-      Array.isArray(duplicateCache.rows) &&
-      duplicateCache.fetchedAt &&
-      (now - duplicateCache.fetchedAt) < cacheMs
-    ){
-      return duplicateCache.rows;
-    }
-
-    if(duplicateCache.promise){
-      return duplicateCache.promise;
-    }
-
-    const url =
-      "https://docs.google.com/spreadsheets/d/" +
-      window.APP_CONFIG.SPREADSHEET_ID +
-      "/gviz/tq?tqx=out:json&gid=" +
-      window.APP_CONFIG.DUPLICATE_GID;
-
-    duplicateCache.promise = fetch(url)
-      .then(res => res.text())
-      .then(text => {
-        const json = parseGvizJson(text);
-        const rows = json.table?.rows || [];
-        duplicateCache.rows = rows;
-        duplicateCache.promise = null;
-        duplicateCache.fetchedAt = Date.now();
-        return rows;
-      })
-      .catch(e => {
-        console.log("getTodayDuplicateRows error", e);
-        duplicateCache.rows = [];
-        duplicateCache.promise = null;
-        duplicateCache.fetchedAt = 0;
-        return [];
-      });
-
-    return duplicateCache.promise;
-  }
-
-  // ===== 今日の重複クラス一覧（スプシ側） =====
-  window.getTodayRemoteDuplicateClassSet = async function(member){
+  async function fetchTodayRemoteDuplicateClassSet(member){
     const cleanMember = window.normalizeMember(member);
     const today = window.getTokyoTodayString();
     const duplicateSet = new Set();
 
     if(!cleanMember) return duplicateSet;
 
+    const tq = [
+      "select C",
+      "where B = '" + escapeForGvizString(cleanMember) + "'",
+      "and D = '" + escapeForGvizString(today) + "'"
+    ].join(" ");
+
+    const url =
+      "https://docs.google.com/spreadsheets/d/" +
+      window.APP_CONFIG.SPREADSHEET_ID +
+      "/gviz/tq?tqx=out:json&gid=" +
+      window.APP_CONFIG.DUPLICATE_GID +
+      "&tq=" + encodeURIComponent(tq);
+
     try{
-      const rows = await getTodayDuplicateRows();
+      const res = await fetch(url, { cache: "no-store" });
+      const text = await res.text();
+      const json = parseGvizJson(text);
+      const rows = json.table?.rows || [];
 
       for(const r of rows){
-        const m = window.normalizeMember(r.c?.[1]?.v || "");
-        if(m !== cleanMember) continue;
-
-        const rawDate = r.c?.[3]?.v ?? r.c?.[3]?.f ?? "";
-        const date = normalizeSheetDateCell(rawDate);
-        if(date !== today) continue;
-
-        const cls = normalizeClassName(r.c?.[2]?.v || "");
-        if(!cls) continue;
-
-        duplicateSet.add(cls);
+        const cls = normalizeClassName(r.c?.[0]?.v || r.c?.[0]?.f || "");
+        if(cls){
+          duplicateSet.add(cls);
+        }
       }
 
       return duplicateSet;
     }catch(e){
-      console.log("getTodayRemoteDuplicateClassSet error", e);
+      console.log("fetchTodayRemoteDuplicateClassSet error", e);
       return duplicateSet;
     }
+  }
+
+  window.getTodayRemoteDuplicateClassSet = async function(member, forceRefresh = false){
+    const cleanMember = window.normalizeMember(member);
+    const today = window.getTokyoTodayString();
+    const cacheKey = getDuplicateCacheKey(cleanMember, today);
+    const now = Date.now();
+    const cacheMs = Number(window.APP_CONFIG.DUPLICATE_CACHE_MS || 0);
+
+    const cached = duplicateCacheMap[cacheKey];
+
+    if(
+      !forceRefresh &&
+      cached &&
+      cached.set instanceof Set &&
+      cached.fetchedAt &&
+      (now - cached.fetchedAt) < cacheMs
+    ){
+      return new Set(cached.set);
+    }
+
+    if(!forceRefresh && cached && cached.promise){
+      return cached.promise.then(set => new Set(set));
+    }
+
+    duplicateCacheMap[cacheKey] = duplicateCacheMap[cacheKey] || {};
+
+    duplicateCacheMap[cacheKey].promise = fetchTodayRemoteDuplicateClassSet(cleanMember)
+      .then(set => {
+        duplicateCacheMap[cacheKey] = {
+          set: new Set(set),
+          fetchedAt: Date.now(),
+          promise: null
+        };
+        return new Set(set);
+      })
+      .catch(e => {
+        console.log("getTodayRemoteDuplicateClassSet error", e);
+        duplicateCacheMap[cacheKey] = {
+          set: new Set(),
+          fetchedAt: 0,
+          promise: null
+        };
+        return new Set();
+      });
+
+    return duplicateCacheMap[cacheKey].promise.then(set => new Set(set));
   };
 
-  // ===== 今日の重複クラス一覧（端末ローカル＋スプシ） =====
-  window.getTodayDuplicateClassSet = async function(member){
-    const remoteSet = await window.getTodayRemoteDuplicateClassSet(member);
-    const localSet = getLocalPendingClassSet(member);
+  window.getTodayDuplicateClassSet = async function(member, forceRefresh = false){
+    const remoteSet = await window.getTodayRemoteDuplicateClassSet(member, forceRefresh);
+    const localPendingSet = getLocalPendingClassSet(member);
+    const localConfirmedSet = getLocalConfirmedClassSet(member);
     const merged = new Set();
 
     remoteSet.forEach(v => merged.add(v));
-    localSet.forEach(v => merged.add(v));
+    localPendingSet.forEach(v => merged.add(v));
+    localConfirmedSet.forEach(v => merged.add(v));
 
     return merged;
   };
 
-  // ===== 今日の重複データまとめ取得 =====
-  window.getTodayDuplicateClasses = async function(member, classNames){
-    const duplicateSet = await window.getTodayDuplicateClassSet(member);
+  window.getTodayDuplicateClasses = async function(member, classNames, forceRefresh = false){
+    const duplicateSet = await window.getTodayDuplicateClassSet(member, forceRefresh);
+
     return (classNames || [])
       .map(normalizeClassName)
       .filter(cls => duplicateSet.has(cls));
   };
 
-  // ===== キャッシュ明示クリア =====
-  window.clearDuplicateCache = function(){
-    duplicateCache = {
-      date: "",
-      rows: null,
-      promise: null,
-      fetchedAt: 0
-    };
+  window.clearDuplicateCache = function(member){
+    const today = window.getTokyoTodayString();
+
+    if(member){
+      const cleanMember = window.normalizeMember(member);
+      delete duplicateCacheMap[getDuplicateCacheKey(cleanMember, today)];
+      return;
+    }
+
+    duplicateCacheMap = {};
   };
 
   // ===== クラス描画（複数選択対応・重複クラス無効化版） =====
@@ -520,6 +652,12 @@
         btn.disabled = false;
         btn.style.cursor = "pointer";
         btn.textContent = btn.dataset.baseLabel;
+
+        // 未選択見た目に戻す
+        btn.style.background = "";
+        btn.style.color = "";
+        btn.style.fontWeight = "";
+        btn.style.border = "";
       }
     }
 
@@ -535,6 +673,13 @@
           btn.style.cursor = "wait";
         }else{
           applyDuplicateStyles(btn, isDuplicate);
+
+          // duplicateでない選択中のものは青を戻す
+          if(!isDuplicate && selectedClasses.includes(baseLabel)){
+            btn.style.background = "#66ADFF";
+            btn.style.color = "#FFF";
+            btn.style.fontWeight = "bold";
+          }
         }
       });
 
@@ -593,7 +738,7 @@
       refreshSelectedView();
     }
 
-    async function paintDuplicateButtons(){
+    async function paintDuplicateButtons(forceRefresh = false){
       const member = window.normalizeMember(window.currentMember);
 
       if(!member){
@@ -604,11 +749,17 @@
 
       infoBox.innerHTML = "受付済みクラス確認中…";
 
-      duplicateClassSet = await window.getTodayDuplicateClassSet(member);
+      duplicateClassSet = await window.getTodayDuplicateClassSet(member, forceRefresh);
 
       classButtonMap.forEach((btn, cls) => {
         const isDuplicate = duplicateClassSet.has(normalizeClassName(cls));
         applyDuplicateStyles(btn, isDuplicate);
+
+        if(!isDuplicate && selectedClasses.includes(cls)){
+          btn.style.background = "#66ADFF";
+          btn.style.color = "#FFF";
+          btn.style.fontWeight = "bold";
+        }
       });
 
       removeDuplicateSelections();
@@ -662,25 +813,26 @@
         return;
       }
 
+      const submitClasses = selectedClasses.slice();
+
+      // 1回目の再チェック（確認前）
       confirmBtn.disabled = true;
       confirmBtn.textContent = "確認中…";
 
-      window.clearDuplicateCache();
-      const duplicateClasses = await window.getTodayDuplicateClasses(member, selectedClasses);
+      window.clearDuplicateCache(member);
+      let duplicateClasses = await window.getTodayDuplicateClasses(member, submitClasses, true);
 
       confirmBtn.disabled = false;
       confirmBtn.textContent = "選択したクラスを確認";
 
       if(duplicateClasses.length > 0){
-        await paintDuplicateButtons();
+        await paintDuplicateButtons(true);
         alert(
           "すでに受付済みのクラスが含まれています。\n\n" +
           duplicateClasses.map(c => "・" + c).join("\n")
         );
         return;
       }
-
-      const submitClasses = selectedClasses.slice();
 
       const ok = await window.showSelectionConfirm({
         member,
@@ -689,27 +841,56 @@
 
       if(!ok) return;
 
+      // 2回目の再チェック（確認OK直後）
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "最終確認中…";
+
+      window.clearDuplicateCache(member);
+      duplicateClasses = await window.getTodayDuplicateClasses(member, submitClasses, true);
+
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = "選択したクラスを確認";
+
+      if(duplicateClasses.length > 0){
+        await paintDuplicateButtons(true);
+        alert(
+          "確認中に受付済みになったクラスがあります。\n\n" +
+          duplicateClasses.map(c => "・" + c).join("\n")
+        );
+        return;
+      }
+
+      // ローカル仮押さえ
       addLocalPendingClasses(member, submitClasses);
-
-      duplicateClassSet = await window.getTodayDuplicateClassSet(member);
+      await paintDuplicateButtons(false);
       clearSelectionsAndBlueState();
-      await paintDuplicateButtons();
-
       setSubmittingState(true);
 
       try{
         await Promise.resolve(onSubmit(submitClasses));
-        window.clearDuplicateCache();
-        await paintDuplicateButtons();
+
+        // 成功したら確定扱いへ
+        promotePendingToConfirmed(member, submitClasses);
+
+        // 念のため最新反映を取り直し
+        window.clearDuplicateCache(member);
+        await paintDuplicateButtons(true);
+
       }catch(e){
         console.log("onSubmit error", e);
+
+        // 失敗したら仮押さえ解除
+        removeLocalPendingClasses(member, submitClasses);
+        window.clearDuplicateCache(member);
+        await paintDuplicateButtons(true);
+
         alert("受付送信時にエラーが発生しました。通信状況をご確認ください。");
       }finally{
         setSubmittingState(false);
       }
     };
 
-    paintDuplicateButtons();
+    paintDuplicateButtons(false);
   };
 
   // ===== LIFF初期化 =====
@@ -774,11 +955,11 @@
       window.APP_CONFIG.COUNT_GID +
       "&tq=" +
       encodeURIComponent(
-        "select C,D where A='" + cleanMember + "' and B='" + ym + "'"
+        "select C,D where A='" + escapeForGvizString(cleanMember) + "' and B='" + escapeForGvizString(ym) + "'"
       );
 
     try{
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: "no-store" });
       const text = await res.text();
 
       const json = JSON.parse(
@@ -840,7 +1021,7 @@
 
   // ===== 単体重複チェック =====
   window.checkDuplicate = async function(member, className){
-    const duplicates = await window.getTodayDuplicateClasses(member, [className]);
+    const duplicates = await window.getTodayDuplicateClasses(member, [className], true);
     return duplicates.includes(normalizeClassName(className));
   };
 
