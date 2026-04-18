@@ -1,5 +1,8 @@
 (() => {
 
+  alert("shared.js DEBUG 2026-04-18-02 loaded");
+console.log("shared.js DEBUG 2026-04-18-02 loaded");
+
   // ===== 共通設定 =====
   window.APP_CONFIG = {
     LIFF_ID: "2008912129-TQRCpL9d",
