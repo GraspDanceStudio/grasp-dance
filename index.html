@@ -1,1 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>受付</title>
 
+<script src="./shared.js?v=20260418-3"></script>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+<style>
+body { font-family: sans-serif; padding: 12px; }
+
+.day-btn {
+  font-size: 22px;
+  padding: 12px 16px;
+  margin: 6px 4px;
+  opacity: 0.6;
+}
+.day-btn.today {
+  opacity: 1;
+  background: #66adff;
+  color: #fff;
+  font-weight: bold;
+}
+
+.class-btn {
+  font-size: 34px;
+  padding: 60px 28px;
+  margin: 18px 0;
+  width: 100%;
+  text-align: left;
+}
+
+#complete {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+#completeBox {
+  background: #fff;
+  padding: 44px 34px;
+  border-radius: 18px;
+  text-align: center;
+  width: 92%;
+  max-width: 560px;
+}
+#completeBox .done {
+  font-size: 44px;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+#completeBox .detail {
+  font-size: 24px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<h2 id="title">読み取り中…</h2>
+
+<div id="dayButtons"></div>
+<div id="container"></div>
+
+<div id="complete">
+  <div id="completeBox">
+    <div class="done">✅ 受付完了</div>
+    <div class="detail" id="completeDetail"></div>
+  </div>
+</div>
+
+<script>
+const title = document.getElementById("title");
+const dayButtons = document.getElementById("dayButtons");
+const container = document.getElementById("container");
+const complete = document.getElementById("complete");
+const completeDetail = document.getElementById("completeDetail");
+
+let currentMember = "";
+let selectedDay = "";
+let submitting = false;
+
+// ===== 送信 =====
+async function submit(classNames){
+
+  if(submitting) return;
+  submitting = true;
+
+  const member = normalizeMember(window.currentMember);
+  const classes = Array.isArray(classNames) ? classNames : [classNames];
+
+  const requests = classes.map(className => {
+    const url =
+      APP_CONFIG.FORM_RESPONSE +
+      "?" + APP_CONFIG.ENTRY_MEMBER + "=" + encodeURIComponent(member) +
+      "&" + APP_CONFIG.ENTRY_CLASS + "=" + encodeURIComponent(className);
+
+    return fetch(url, { method: "POST", mode: "no-cors" })
+      .catch(e => console.log("submit fetch error", e));
+  });
+
+  await Promise.all(requests);
+
+  completeDetail.innerHTML =
+    "会員番号：<b>" + escapeHtml(member) + "</b><br>" +
+    "クラス：<b>" + classes.map(c => escapeHtml(c)).join("<br>") + "</b><br><br>" +
+    "受付完了しました";
+
+  complete.style.display = "flex";
+
+  setTimeout(() => {
+    complete.style.display = "none";
+  }, 1200);
+
+  submitting = false;
+}
+
+// ===== 画面描画 =====
+function renderAll() {
+  renderDayButtons({
+    dayButtonsEl: dayButtons,
+    selectedDay,
+    onSelect: (day) => {
+      selectedDay = day;
+      renderAll();
+    }
+  });
+
+  renderClasses({
+    day: selectedDay,
+    titleEl: title,
+    containerEl: container,
+    onSubmit: submit
+  });
+}
+
+// ===== 初期化 =====
+(async () => {
+
+  try{
+    await initLiffSafe();
+  }catch(e){}
+
+  try{
+    if(typeof liff !== "undefined" && liff.isLoggedIn()){
+      const urlParams = new URLSearchParams(location.search);
+      const memberParam = urlParams.get("member") || "";
+
+      currentMember = normalizeMember(memberParam);
+      window.currentMember = currentMember;
+    }
+  }catch(e){
+    console.log("LIFF member error", e);
+  }
+
+  if(!currentMember){
+    title.textContent = "会員番号が取得できません";
+    return;
+  }
+
+  try{
+    selectedDay = getTokyoWeekdayLabel();
+  }catch(e){
+    selectedDay = "月";
+  }
+
+  if(selectedDay === "日") selectedDay = "土";
+
+  renderAll();
+
+})();
+</script>
+
+</body>
+</html>
