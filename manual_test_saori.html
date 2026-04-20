@@ -81,18 +81,6 @@ input[type="text"]{
   color: #fff;
 }
 
-.remain-btn{
-  font-size: 28px;
-  padding: 26px 20px;
-  margin: 16px 0;
-  width: 100%;
-  background: #ffd966;
-  color: #000;
-  font-weight: bold;
-  border: none;
-  border-radius: 10px;
-}
-
 #complete{
   position: fixed;
   inset: 0;
@@ -145,10 +133,6 @@ input[type="text"]{
 <div id="currentClassBox" class="current-class-box">
   現在受付中：未選択
 </div>
-
-<button id="remainBtn" class="remain-btn">
-  受講数照会
-</button>
 
 <div class="input-box">
   <input id="memberInput" type="text" placeholder="QRのURL / 会員番号 / 体験番号" autocomplete="off" autocapitalize="off" />
@@ -216,7 +200,6 @@ input[type="text"]{
   ];
 
   const currentClassBox = document.getElementById("currentClassBox");
-  const remainBtn = document.getElementById("remainBtn");
   const memberInput = document.getElementById("memberInput");
   const statusBox = document.getElementById("statusBox");
   const classGrid = document.getElementById("classGrid");
@@ -396,25 +379,6 @@ input[type="text"]{
       focusInput();
     }
   }
-
-  remainBtn.onclick = async () => {
-    const member = normalizeMemberSafe(memberInput.value || window.currentMember || "");
-
-    if(!member){
-      alert("会員番号またはQRを入力してください");
-      focusInput();
-      return;
-    }
-
-    try{
-      showLoading();
-      const data = await fetchCount(member);
-      showCount(data);
-    }catch(e){
-      console.log("remainBtn error", e);
-      alert("照会エラー");
-    }
-  };
 
   memberInput.addEventListener("input", () => {
     let v = memberInput.value;
