@@ -4,28 +4,30 @@
 <meta charset="UTF-8" />
 <title>受付（クラス切替・自動送信）</title>
 
-<script src="./shared.js?v=20260420-1"></script>
+<script src="./shared.js?v=20260420-2"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
 body {
   font-family: sans-serif;
   padding: 12px;
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
 .page-title {
-  font-size: 40px;
+  font-size: 32px;
   font-weight: 800;
   margin-bottom: 10px;
 }
 
 .current-class-box {
-  font-size: 30px;
+  font-size: 24px;
   font-weight: 800;
   line-height: 1.5;
-  margin-bottom: 16px;
-  padding: 16px 18px;
-  border-radius: 14px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
   background: #f3f3f3;
 }
 
@@ -35,45 +37,46 @@ body {
 }
 
 .input-box {
-  margin: 12px 0 18px;
+  margin: 10px 0 14px;
 }
 
 input[type="text"]{
-  font-size: 28px;
-  padding: 18px;
+  font-size: 22px;
+  padding: 14px 16px;
   width: 100%;
   box-sizing: border-box;
 }
 
 .status-box {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
-  margin: 8px 0 18px;
+  margin: 8px 0 16px;
   line-height: 1.6;
 }
 
 .section-title {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 800;
-  margin: 18px 0 12px;
+  margin: 18px 0 10px;
 }
 
 .class-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .class-select-btn {
-  font-size: 28px;
-  padding: 26px 22px;
+  font-size: 20px;
+  padding: 16px 16px;
   width: 100%;
   text-align: left;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   background: #f5f5f5;
   font-weight: 800;
   cursor: pointer;
+  line-height: 1.4;
 }
 
 .class-select-btn.active {
@@ -93,35 +96,47 @@ input[type="text"]{
 
 #completeBox{
   background: #fff;
-  padding: 44px 20px;
+  padding: 36px 20px;
   border-radius: 18px;
   text-align: center;
-  width: 98%;
+  width: 96%;
   max-width: 560px;
   box-sizing: border-box;
   line-height: 1.6;
 }
 
 #completeDetail{
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 700;
 }
 
 #completeDetail b{
-  font-size: 36px;
+  font-size: 32px;
 }
 
 .complete-title{
-  font-size: 48px;
+  font-size: 40px;
   font-weight: 800;
   display: block;
 }
 
 .helper-text {
-  font-size: 20px;
+  font-size: 16px;
   color: #555;
   line-height: 1.6;
   margin-top: 8px;
+}
+
+.meta-row{
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 700px){
+  .class-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
 </head>
@@ -129,6 +144,7 @@ input[type="text"]{
 <body>
 
 <div class="page-title">受付</div>
+<div id="metaRow" class="meta-row"></div>
 
 <div id="currentClassBox" class="current-class-box">
   現在受付中：未選択
@@ -137,12 +153,12 @@ input[type="text"]{
 <div class="input-box">
   <input id="memberInput" type="text" placeholder="QRのURL / 会員番号 / 体験番号" autocomplete="off" autocapitalize="off" />
   <div class="helper-text">
-    クラスを選んでから、QRを読むかURLを貼り付けてください。<br>
-    QRリーダー導入後は、この入力欄に自動で入る想定です。
+    QRリーダー導入後は、この入力欄に自動で入る想定です。<br>
+    受付クラスは必要なときだけ下のボタンで切り替えてください。
   </div>
 </div>
 
-<div id="statusBox" class="status-box">クラスを選択してください</div>
+<div id="statusBox" class="status-box">初期クラスを設定中…</div>
 
 <div class="section-title">受付クラス</div>
 <div id="classGrid" class="class-grid"></div>
@@ -158,47 +174,25 @@ input[type="text"]{
 
   await initLiffSafe();
 
-  const CLASS_LIST = [
-    "UCCHY初級",
-    "UCCHY中級",
-    "SHINYA",
-    "あすぴ",
-    "K×G中村キッズ",
-    "K×G中村オープン",
-    "K×G長久手",
-    "SHO-TA",
-    "KIBE初級",
-    "KIBE中級",
-    "MIZUKI",
-    "K×G茶屋ヶ坂",
-    "AIRI初級",
-    "AIRI中級",
-    "ruchica",
-    "K×G高針キッズ",
-    "K×G高針オープン",
-    "SERINAキッズ",
-    "SERINA初中級",
-    "Shogo",
-    "RIN",
-    "心",
-    "K×G瀬戸",
-    "manaキッズ",
-    "mana初級",
-    "KANAMI",
-    "RYUYA",
-    "SAMURAI",
-    "幼児",
-    "nikoキッズ",
-    "SAORI",
-    "TAKUEI",
-    "愛梨",
-    "MAHIRO初級",
-    "MAHIRO中級",
-    "WS_4/11Cocona練習会",
-    "WS_4/18Konoka練習会",
-    "WS_4/25Rena練習会"
+  const CLASSES_BY_DAY = {
+    "月": ["UCCHY初級","UCCHY中級","SHINYA","あすぴ","K×G中村キッズ","K×G中村オープン","K×G長久手"],
+    "火": ["SHO-TA","KIBE初級","KIBE中級","MIZUKI","K×G茶屋ヶ坂"],
+    "水": ["AIRI初級","AIRI中級","ruchica","K×G高針キッズ","K×G高針オープン"],
+    "木": ["SERINAキッズ","SERINA初中級","Shogo","RIN","心","K×G瀬戸"],
+    "金": ["manaキッズ","mana初級","KANAMI","RYUYA","SAMURAI"],
+    "土": ["幼児","nikoキッズ","SAORI","TAKUEI","愛梨","MAHIRO初級","MAHIRO中級"]
+  };
+
+  const ALL_CLASSES = [
+    ...CLASSES_BY_DAY["月"],
+    ...CLASSES_BY_DAY["火"],
+    ...CLASSES_BY_DAY["水"],
+    ...CLASSES_BY_DAY["木"],
+    ...CLASSES_BY_DAY["金"],
+    ...CLASSES_BY_DAY["土"]
   ];
 
+  const metaRow = document.getElementById("metaRow");
   const currentClassBox = document.getElementById("currentClassBox");
   const memberInput = document.getElementById("memberInput");
   const statusBox = document.getElementById("statusBox");
@@ -211,6 +205,21 @@ input[type="text"]{
   let inputTimer = null;
   let lastProcessedValue = "";
   let resetTimer = null;
+
+  function getTodayDayLabel(){
+    try{
+      let day = getTokyoWeekdayLabel();
+      if(day === "日") day = "月";
+      if(!CLASSES_BY_DAY[day]) day = "月";
+      return day;
+    }catch(e){
+      return "月";
+    }
+  }
+
+  const todayDay = getTodayDayLabel();
+  const todayClassList = CLASSES_BY_DAY[todayDay] || [];
+  const defaultClass = todayClassList[0] || ALL_CLASSES[0] || "";
 
   function setStatus(text){
     statusBox.textContent = text;
@@ -277,7 +286,7 @@ input[type="text"]{
   function renderClassButtons(){
     classGrid.innerHTML = "";
 
-    CLASS_LIST.forEach(className => {
+    ALL_CLASSES.forEach(className => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "class-select-btn" + (className === selectedClass ? " active" : "");
@@ -408,8 +417,13 @@ input[type="text"]{
     }
   });
 
+  metaRow.innerHTML =
+    "本日の曜日：<b>" + escapeHtml(todayDay) + "曜</b> ／ 初期選択：<b>" + escapeHtml(defaultClass) + "</b>";
+
+  selectedClass = defaultClass;
   updateCurrentClassBox();
   renderClassButtons();
+  setStatus("読み取り待機中");
   focusInput();
 
 })();
