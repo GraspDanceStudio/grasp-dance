@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8" />
-<title>受付（固定クラス：SAORI）</title>
+<title>受付（固定クラス：SAORI / 完全自動）</title>
 
 <script src="./shared.js?v=20260418-8"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -18,25 +18,12 @@ input[type="text"]{
   box-sizing: border-box;
 }
 
-.day-btn {
-  font-size: 24px;
-  padding: 14px 20px;
-  margin: 6px 4px;
-  opacity: 0.6;
-}
-.day-btn.today {
-  opacity: 1;
-  background: #66adff;
-  color: #fff;
-  font-weight: bold;
-}
-
 .class-btn {
   font-size: 32px;
   padding: 60px 28px;
   margin: 18px 0;
   width: 100%;
-  text-align: left;
+  text-align: center;
 }
 
 #complete {
@@ -55,6 +42,7 @@ input[type="text"]{
   text-align: center;
   width: 92%;
   max-width: 560px;
+  box-sizing: border-box;
 }
 #completeBox .done {
   font-size: 44px;
@@ -65,18 +53,40 @@ input[type="text"]{
   font-size: 24px;
   line-height: 1.6;
 }
+
+.status-box{
+  font-size: 26px;
+  font-weight: 700;
+  margin: 10px 0 16px;
+  line-height: 1.6;
+}
+
+.title-main{
+  font-size: 34px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.title-sub{
+  font-size: 24px;
+  color: #444;
+  margin-bottom: 14px;
+}
 </style>
 </head>
 
 <body>
-<h2 id="title">SAORI受付：QRまたは会員番号を入力してください</h2>
+<div class="title-main">SAORI受付</div>
+<div class="title-sub">QRを読み取るか、会員番号 / URLを入力してください</div>
 
 <div class="input-box">
-  <input id="memberInput" type="text" placeholder="会員番号 または QRのURL"/>
+  <input id="memberInput" type="text" placeholder="会員番号 または QRのURL" autocomplete="off" autocapitalize="off" />
 </div>
 
-<button id="goBtn" class="class-btn" style="text-align:center;">
-  受付する（SAORI）
+<div id="statusBox" class="status-box">待機中</div>
+
+<button id="goBtn" class="class-btn" style="display:none;">
+  受付する
 </button>
 
 <div id="complete">
@@ -89,16 +99,18 @@ input[type="text"]{
 <script>
 const FIXED_CLASS = "SAORI";
 
-const title = document.getElementById("title");
 const memberInput = document.getElementById("memberInput");
 const goBtn = document.getElementById("goBtn");
 const complete = document.getElementById("complete");
 const completeDetail = document.getElementById("completeDetail");
+const statusBox = document.getElementById("statusBox");
 
 let currentMember = "";
 let submitting = false;
+let lastAutoSubmittedValue = "";
+let resetTimer = null;
 
-// URL対応つきの安全版
+// URL対応つき安全版
 function normalizeMemberSafe(v){
   try{
     if(typeof normalizeMember === "function"){
@@ -145,33 +157,26 @@ function escapeHtmlSafe(v){
     .replaceAll("'","&#039;");
 }
 
-// 入力中の見た目は壊さず、全角だけ半角化
-memberInput.addEventListener("input", () => {
-  let v = memberInput.value;
-
-  v = v.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s =>
-    String.fromCharCode(s.charCodeAt(0) - 0xFEE0)
-  );
-
-  memberInput.value = v;
-});
-
-memberInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    goBtn.click();
-  }
-});
+function setStatus(text){
+  statusBox.textContent = text;
+}
 
 function focusInput(){
   setTimeout(() => memberInput.focus(), 50);
 }
 
 function resetForm(){
+  if(resetTimer){
+    clearTimeout(resetTimer);
+    resetTimer = null;
+  }
+
   currentMember = "";
   window.currentMember = "";
   submitting = false;
+  lastAutoSubmittedValue = "";
   memberInput.value = "";
+  setStatus("待機中");
   focusInput();
 }
 
@@ -184,7 +189,7 @@ async function submit(classNames){
   const classes = Array.isArray(classNames) ? classNames : [classNames];
 
   if(!member){
-    alert("会員番号が取得できませんでした");
+    setStatus("会員番号が取得できません");
     submitting = false;
     focusInput();
     return;
@@ -206,11 +211,12 @@ async function submit(classNames){
     completeDetail.innerHTML =
       "会員番号：<b>" + escapeHtmlSafe(member) + "</b><br>" +
       "クラス：<b>" + classes.map(c => escapeHtmlSafe(c)).join("<br>") + "</b><br><br>" +
-      "次の会員を入力してください";
+      "次の会員を読み取ってください";
 
     complete.style.display = "flex";
+    setStatus("受付完了");
 
-    setTimeout(() => {
+    resetTimer = setTimeout(() => {
       complete.style.display = "none";
       resetForm();
     }, 1200);
@@ -218,24 +224,83 @@ async function submit(classNames){
   }catch(e){
     console.log("submit error", e);
     alert("送信エラー");
+    setStatus("送信エラー");
     submitting = false;
     focusInput();
   }
 }
 
-goBtn.onclick = async () => {
-  const v = normalizeMemberSafe(memberInput.value);
+async function handleAutoReception(rawValue){
+  const normalized = normalizeMemberSafe(rawValue);
 
-  if (!v) {
-    alert("会員番号を入力してください");
+  if(!normalized) return;
+  if(submitting) return;
+  if(normalized === lastAutoSubmittedValue) return;
+
+  currentMember = normalized;
+  window.currentMember = normalized;
+
+  setStatus("受付済み確認中…");
+
+  try{
+    const duplicate = await checkDuplicate(normalized, FIXED_CLASS);
+
+    if(duplicate){
+      setStatus("本日受付済み");
+      alert(
+        "この会員は本日すでに受付済みです。\n\n" +
+        "会員番号： " + normalized + "\n" +
+        "クラス： " + FIXED_CLASS
+      );
+
+      lastAutoSubmittedValue = normalized;
+
+      resetTimer = setTimeout(() => {
+        resetForm();
+      }, 800);
+
+      return;
+    }
+
+    lastAutoSubmittedValue = normalized;
+    setStatus("送信中…");
+    await submit([FIXED_CLASS]);
+
+  }catch(e){
+    console.log("handleAutoReception error", e);
+    alert("受付処理エラー");
+    setStatus("受付処理エラー");
+    submitting = false;
     focusInput();
-    return;
   }
+}
 
-  currentMember = v;
-  window.currentMember = v;
+// 入力中は全角を半角へ寄せるだけにして、URLは壊さない
+memberInput.addEventListener("input", async () => {
+  let v = memberInput.value;
 
-  await submit([FIXED_CLASS]);
+  v = v.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s =>
+    String.fromCharCode(s.charCodeAt(0) - 0xFEE0)
+  );
+
+  memberInput.value = v;
+
+  // 何か入ったら自動処理
+  // URLでも番号でも normalizeMemberSafe が吸収
+  await handleAutoReception(v);
+});
+
+// 念のため Enter 手動にも対応
+memberInput.addEventListener("keydown", async (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    await handleAutoReception(memberInput.value);
+  }
+});
+
+// 隠しボタン（デバッグ・手動用）
+goBtn.onclick = async () => {
+  await handleAutoReception(memberInput.value);
 };
 
 (async () => {
