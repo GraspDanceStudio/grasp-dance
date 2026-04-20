@@ -1,107 +1,167 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>受付</title>
+<meta charset="UTF-8" />
+<title>受付（クラス切替・自動送信）</title>
 
-<script src="shared.js?v=20260418-8"></script>
+<script src="./shared.js?v=20260420-1"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
-body { font-family: sans-serif; padding: 10px; }
-
-.class-btn{
-font-size:32px;
-padding:46px 24px;
-margin:14px 0;
-width:100%;
-text-align:left;
-border:none;
-border-radius:12px;
-background:#f5f5f5;
-font-weight:700;
+body {
+  font-family: sans-serif;
+  padding: 12px;
 }
 
-.class-btn:disabled{
-background:#d9d9d9;
-color:#666;
+.page-title {
+  font-size: 40px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.current-class-box {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.5;
+  margin-bottom: 16px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: #f3f3f3;
+}
+
+.current-class-box.active {
+  background: #e8f2ff;
+  color: #114b9b;
+}
+
+.input-box {
+  margin: 12px 0 18px;
+}
+
+input[type="text"]{
+  font-size: 28px;
+  padding: 18px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.status-box {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 8px 0 18px;
+  line-height: 1.6;
+}
+
+.section-title {
+  font-size: 26px;
+  font-weight: 800;
+  margin: 18px 0 12px;
+}
+
+.class-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.class-select-btn {
+  font-size: 28px;
+  padding: 26px 22px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 12px;
+  background: #f5f5f5;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.class-select-btn.active {
+  background: #66adff;
+  color: #fff;
 }
 
 .remain-btn{
-font-size:28px;
-padding:26px 20px;
-margin:16px 0;
-width:100%;
-background:#ffd966;
-color:#000;
-font-weight:bold;
-border:none;
-border-radius:10px;
-}
-
-.current-box{
-font-size:30px;
-font-weight:800;
-margin:8px 0 14px;
-line-height:1.5;
-}
-
-.info-box{
-font-size:22px;
-margin:0 0 14px;
-line-height:1.6;
+  font-size: 28px;
+  padding: 26px 20px;
+  margin: 16px 0;
+  width: 100%;
+  background: #ffd966;
+  color: #000;
+  font-weight: bold;
+  border: none;
+  border-radius: 10px;
 }
 
 #complete{
-position:fixed;
-inset:0;
-background:rgba(0,0,0,0.65);
-display:none;
-align-items:center;
-justify-content:center;
-z-index:999;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
 }
 
 #completeBox{
-background:#fff;
-padding:44px 20px;
-border-radius:18px;
-text-align:center;
-width:98%;
-max-width:560px;
-box-sizing:border-box;
-line-height:1.6;
+  background: #fff;
+  padding: 44px 20px;
+  border-radius: 18px;
+  text-align: center;
+  width: 98%;
+  max-width: 560px;
+  box-sizing: border-box;
+  line-height: 1.6;
 }
 
 #completeDetail{
-font-size:28px;
-font-weight:700;
+  font-size: 28px;
+  font-weight: 700;
 }
 
 #completeDetail b{
-font-size:36px;
+  font-size: 36px;
 }
 
 .complete-title{
-font-size:48px;
-font-weight:800;
-display:block;
+  font-size: 48px;
+  font-weight: 800;
+  display: block;
+}
+
+.helper-text {
+  font-size: 20px;
+  color: #555;
+  line-height: 1.6;
+  margin-top: 8px;
 }
 </style>
 </head>
 
 <body>
 
-<h2 id="title"></h2>
+<div class="page-title">受付</div>
 
-<div id="currentBox" class="current-box"></div>
+<div id="currentClassBox" class="current-class-box">
+  現在受付中：未選択
+</div>
 
 <button id="remainBtn" class="remain-btn">
-受講数照会
+  受講数照会
 </button>
 
-<div id="infoBox" class="info-box"></div>
-<div id="container"></div>
+<div class="input-box">
+  <input id="memberInput" type="text" placeholder="QRのURL / 会員番号 / 体験番号" autocomplete="off" autocapitalize="off" />
+  <div class="helper-text">
+    クラスを選んでから、QRを読むかURLを貼り付けてください。<br>
+    QRリーダー導入後は、この入力欄に自動で入る想定です。
+  </div>
+</div>
+
+<div id="statusBox" class="status-box">クラスを選択してください</div>
+
+<div class="section-title">受付クラス</div>
+<div id="classGrid" class="class-grid"></div>
 
 <div id="complete">
   <div id="completeBox">
@@ -114,7 +174,6 @@ display:block;
 
   await initLiffSafe();
 
-  // ===== クラス一覧（曜日なしで全部表示） =====
   const CLASS_LIST = [
     "UCCHY初級",
     "UCCHY中級",
@@ -156,248 +215,238 @@ display:block;
     "WS_4/25Rena練習会"
   ];
 
-  let member = null;
-
-  const params = new URLSearchParams(window.location.search);
-  member = params.get("member");
-
-  if(member){
-    member = normalizeMember(member);
-  }
-
-  if(!member){
-    const url = new URL(location.href);
-    member = url.searchParams.get("member");
-
-    if(member){
-      member = normalizeMember(member);
-    }
-  }
-
-  if(!member && typeof liff !== "undefined"){
-    try{
-      if(liff.isInClient()){
-        const ctx = liff.getContext();
-        if(ctx && ctx.queryParams && ctx.queryParams.member){
-          member = normalizeMember(ctx.queryParams.member);
-        }
-      }
-    }catch(e){
-      console.log("LIFF context error", e);
-    }
-  }
-
-  window.currentMember = normalizeMember(member || "");
-
-  const title = document.getElementById("title");
-  const currentBox = document.getElementById("currentBox");
-  const container = document.getElementById("container");
+  const currentClassBox = document.getElementById("currentClassBox");
+  const remainBtn = document.getElementById("remainBtn");
+  const memberInput = document.getElementById("memberInput");
+  const statusBox = document.getElementById("statusBox");
+  const classGrid = document.getElementById("classGrid");
   const complete = document.getElementById("complete");
   const completeDetail = document.getElementById("completeDetail");
-  const infoBox = document.getElementById("infoBox");
 
+  let selectedClass = "";
   let submitting = false;
-  const cleanBaseUrl = location.origin + location.pathname;
+  let inputTimer = null;
+  let lastProcessedValue = "";
+  let resetTimer = null;
 
-  function renderHeader(){
-    const currentMember = normalizeMember(window.currentMember);
-
-    title.textContent = "受付";
-    currentBox.innerHTML =
-      "会員番号：<b>" + escapeHtml(currentMember || "未読取") + "</b><br>" +
-      "<span style='font-size:24px;font-weight:700;'>クラスを選択してください</span>";
+  function setStatus(text){
+    statusBox.textContent = text;
   }
 
-  /* =====================
-     QR再読取
-  ===================== */
+  function focusInput(){
+    setTimeout(() => memberInput.focus(), 50);
+  }
 
-  window.openScanner = function(){
-    if(typeof liff !== "undefined" && liff.isInClient()){
-      liff.scanCodeV2()
-        .then(result => {
-          if(result && result.value){
-            try{
-              const scannedUrl = new URL(result.value);
-              let scannedMember = scannedUrl.searchParams.get("member");
-
-              if(scannedMember){
-                scannedMember = normalizeMember(scannedMember);
-                window.currentMember = scannedMember;
-
-                renderAll();
-
-                completeDetail.innerHTML =
-                  "<span class='complete-title'>✅ 読み取り完了</span><br><br>" +
-                  "会員番号：<b>" + escapeHtml(scannedMember) + "</b><br><br>" +
-                  "<span>クラスを選択してください</span>";
-
-                complete.style.display = "flex";
-
-                setTimeout(() => {
-                  complete.style.display = "none";
-                }, 700);
-              }else{
-                alert("QRから会員番号を取得できませんでした");
-              }
-            }catch(e){
-              console.log("scan parse error", e);
-              alert("QRの読み取り結果を解析できませんでした");
-            }
-          }
-        })
-        .catch(err => {
-          console.log("scan error", err);
-        });
+  function updateCurrentClassBox(){
+    if(selectedClass){
+      currentClassBox.classList.add("active");
+      currentClassBox.innerHTML =
+        "現在受付中：<b>" + escapeHtml(selectedClass) + "</b>";
     }else{
-      location.replace(cleanBaseUrl);
+      currentClassBox.classList.remove("active");
+      currentClassBox.innerHTML = "現在受付中：未選択";
     }
-  };
+  }
 
-  /* =====================
-     受講数照会
-  ===================== */
+  function normalizeMemberSafe(v){
+    try{
+      if(typeof normalizeMember === "function"){
+        return normalizeMember(v);
+      }
+    }catch(e){}
 
-  document.getElementById("remainBtn").onclick = async () => {
-    const currentMember = normalizeMember(window.currentMember);
-
-    if(!currentMember){
-      alert("会員QRを読み取ってください");
-      return;
-    }
+    let s = String(v || "").trim();
 
     try{
-      showLoading();
-      const data = await fetchCount(currentMember);
-      showCount(data);
-    }catch(e){
-      alert("照会エラー");
-      console.log("remainBtn error", e);
+      if(/^https?:/i.test(s)){
+        const u = new URL(s);
+        s = u.searchParams.get("member") || s;
+      }
+    }catch(e){}
+
+    try{
+      s = decodeURIComponent(s);
+    }catch(e){}
+
+    s = s.split("?")[0].trim();
+
+    s = s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, ch =>
+      String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
+    );
+
+    s = s.replace(/[^A-Za-z0-9\-_]/g, "");
+    s = s.toUpperCase();
+
+    return s;
+  }
+
+  function resetInputOnly(){
+    if(resetTimer){
+      clearTimeout(resetTimer);
+      resetTimer = null;
     }
-  };
 
-  /* =====================
-     受付処理
-  ===================== */
+    memberInput.value = "";
+    lastProcessedValue = "";
+    focusInput();
+  }
 
-  async function submit(className){
+  function renderClassButtons(){
+    classGrid.innerHTML = "";
 
+    CLASS_LIST.forEach(className => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "class-select-btn" + (className === selectedClass ? " active" : "");
+      btn.textContent = className;
+
+      btn.onclick = () => {
+        selectedClass = className;
+        updateCurrentClassBox();
+        renderClassButtons();
+        setStatus("読み取り待機中");
+        resetInputOnly();
+      };
+
+      classGrid.appendChild(btn);
+    });
+  }
+
+  async function submitFixedClass(member, className){
     if(submitting) return;
     submitting = true;
-
-    const currentMember = normalizeMember(window.currentMember);
-
-    if(!currentMember){
-      alert("会員QRを読み取ってください");
-      submitting = false;
-      return;
-    }
 
     try{
       completeDetail.innerHTML =
         "<span class='complete-title'>✅ 受付完了</span><br><br>" +
-        "会員番号：<b>" + escapeHtml(currentMember) + "</b><br>" +
+        "会員番号：<b>" + escapeHtml(member) + "</b><br>" +
         "クラス：<b>" + escapeHtml(className) + "</b>";
 
       complete.style.display = "flex";
 
       const url =
         APP_CONFIG.FORM_RESPONSE +
-        "?" + APP_CONFIG.ENTRY_MEMBER + "=" + encodeURIComponent(currentMember) +
+        "?" + APP_CONFIG.ENTRY_MEMBER + "=" + encodeURIComponent(member) +
         "&" + APP_CONFIG.ENTRY_CLASS + "=" + encodeURIComponent(className);
 
       await fetch(url, { method:"POST", mode:"no-cors" });
 
-      setTimeout(() => {
+      setStatus("受付完了");
+
+      resetTimer = setTimeout(() => {
         complete.style.display = "none";
-        openScanner();
         submitting = false;
-      }, 1200);
+        resetInputOnly();
+        setStatus("読み取り待機中");
+      }, 1000);
 
     }catch(e){
-      console.log("submit error", e);
+      console.log("submitFixedClass error", e);
+      complete.style.display = "none";
       alert("送信エラー");
       submitting = false;
+      setStatus("送信エラー");
+      focusInput();
     }
   }
 
-  /* =====================
-     クラス描画
-  ===================== */
+  async function processReception(rawValue){
+    const member = normalizeMemberSafe(rawValue);
 
-  async function renderClassButtons(){
-    container.innerHTML = "";
-    infoBox.innerHTML = "";
+    if(!member) return;
+    if(!selectedClass){
+      setStatus("先にクラスを選択してください");
+      return;
+    }
+    if(submitting) return;
+    if(member === lastProcessedValue) return;
 
-    const currentMember = normalizeMember(window.currentMember);
+    lastProcessedValue = member;
+    window.currentMember = member;
 
-    if(!currentMember){
-      infoBox.innerHTML = "会員QRを読み取ってください";
+    try{
+      setStatus("受付済み確認中…");
+
+      const duplicate = await checkDuplicate(member, selectedClass);
+
+      if(duplicate){
+        setStatus("本日受付済み");
+        alert(
+          "この会員は本日すでに受付済みです。\n\n" +
+          "会員番号： " + member + "\n" +
+          "クラス： " + selectedClass
+        );
+
+        resetTimer = setTimeout(() => {
+          resetInputOnly();
+          setStatus("読み取り待機中");
+        }, 700);
+
+        return;
+      }
+
+      setStatus("送信中…");
+      await submitFixedClass(member, selectedClass);
+
+    }catch(e){
+      console.log("processReception error", e);
+      alert("受付エラー");
+      submitting = false;
+      setStatus("受付エラー");
+      focusInput();
+    }
+  }
+
+  remainBtn.onclick = async () => {
+    const member = normalizeMemberSafe(memberInput.value || window.currentMember || "");
+
+    if(!member){
+      alert("会員番号またはQRを入力してください");
+      focusInput();
       return;
     }
 
-    infoBox.innerHTML = "受付済み確認中…";
-
-    let duplicateSet = new Set();
     try{
-      duplicateSet = await getTodayDuplicateClassSet(currentMember, true);
+      showLoading();
+      const data = await fetchCount(member);
+      showCount(data);
     }catch(e){
-      console.log("duplicateSet error", e);
+      console.log("remainBtn error", e);
+      alert("照会エラー");
+    }
+  };
+
+  memberInput.addEventListener("input", () => {
+    let v = memberInput.value;
+
+    v = v.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s =>
+      String.fromCharCode(s.charCodeAt(0) - 0xFEE0)
+    );
+
+    memberInput.value = v;
+
+    if(inputTimer){
+      clearTimeout(inputTimer);
     }
 
-    let duplicateCount = 0;
+    inputTimer = setTimeout(async () => {
+      await processReception(memberInput.value);
+    }, 250);
+  });
 
-    CLASS_LIST.forEach(className => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "class-btn";
-
-      const isDuplicate = duplicateSet.has(className);
-
-      if(isDuplicate){
-        btn.textContent = "受付 ▶ " + className + "（受付済み）";
-        btn.disabled = true;
-        duplicateCount++;
-      }else{
-        btn.textContent = "受付 ▶ " + className;
-        btn.disabled = false;
-
-        btn.onclick = async () => {
-          try{
-            const duplicate = await checkDuplicate(currentMember, className);
-
-            if(duplicate){
-              await renderClassButtons();
-              alert("このクラスは本日すでに受付済みです");
-              return;
-            }
-
-            await submit(className);
-
-          }catch(e){
-            console.log("class submit error", e);
-            alert("受付エラー");
-          }
-        };
+  memberInput.addEventListener("keydown", async (e) => {
+    if(e.key === "Enter"){
+      e.preventDefault();
+      if(inputTimer){
+        clearTimeout(inputTimer);
       }
-
-      container.appendChild(btn);
-    });
-
-    if(duplicateCount > 0){
-      infoBox.innerHTML =
-        "<span style='color:#666;font-weight:700;'>グレー表示のクラスは本日受付済みです</span>";
-    }else{
-      infoBox.innerHTML = "";
+      await processReception(memberInput.value);
     }
-  }
+  });
 
-  function renderAll(){
-    renderHeader();
-    renderClassButtons();
-  }
-
-  renderAll();
+  updateCurrentClassBox();
+  renderClassButtons();
+  focusInput();
 
 })();
 </script>
