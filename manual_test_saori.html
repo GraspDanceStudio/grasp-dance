@@ -2,9 +2,9 @@
 <html>
 <head>
 <meta charset="UTF-8" />
-<title>受付（クラス切替・自動送信）</title>
+<title>受付（曜日切替・自動送信）</title>
 
-<script src="./shared.js?v=20260420-2"></script>
+<script src="./shared.js?v=20260420-4"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
@@ -58,6 +58,28 @@ input[type="text"]{
   font-size: 22px;
   font-weight: 800;
   margin: 18px 0 10px;
+}
+
+.day-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.day-btn {
+  font-size: 18px;
+  padding: 12px 10px;
+  border: none;
+  border-radius: 10px;
+  background: #f0f0f0;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.day-btn.active {
+  background: #66adff;
+  color: #fff;
 }
 
 .class-grid {
@@ -133,6 +155,12 @@ input[type="text"]{
   margin-bottom: 14px;
 }
 
+@media (max-width: 900px){
+  .day-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 700px){
   .class-grid {
     grid-template-columns: 1fr;
@@ -153,12 +181,15 @@ input[type="text"]{
 <div class="input-box">
   <input id="memberInput" type="text" placeholder="QRのURL / 会員番号 / 体験番号" autocomplete="off" autocapitalize="off" />
   <div class="helper-text">
-    QRリーダー導入後は、この入力欄に自動で入る想定です。<br>
-    受付クラスは必要なときだけ下のボタンで切り替えてください。
+    曜日とクラスを確認してから、QRを読むかURLを貼り付けてください。<br>
+    QRリーダー導入後は、この入力欄に自動で入る想定です。
   </div>
 </div>
 
-<div id="statusBox" class="status-box">初期クラスを設定中…</div>
+<div id="statusBox" class="status-box">初期設定中…</div>
+
+<div class="section-title">曜日</div>
+<div id="dayGrid" class="day-grid"></div>
 
 <div class="section-title">受付クラス</div>
 <div id="classGrid" class="class-grid"></div>
@@ -174,32 +205,41 @@ input[type="text"]{
 
   await initLiffSafe();
 
+  const DAY_ORDER = ["月","火","水","木","金","土"];
+
   const CLASSES_BY_DAY = {
     "月": ["UCCHY初級","UCCHY中級","SHINYA","あすぴ","K×G中村キッズ","K×G中村オープン","K×G長久手"],
     "火": ["SHO-TA","KIBE初級","KIBE中級","MIZUKI","K×G茶屋ヶ坂"],
     "水": ["AIRI初級","AIRI中級","ruchica","K×G高針キッズ","K×G高針オープン"],
     "木": ["SERINAキッズ","SERINA初中級","Shogo","RIN","心","K×G瀬戸"],
     "金": ["manaキッズ","mana初級","KANAMI","RYUYA","SAMURAI"],
-    "土": ["幼児","nikoキッズ","SAORI","TAKUEI","愛梨","MAHIRO初級","MAHIRO中級"]
+    "土": ["幼児","nikoキッズ","SAORI","TAKUEI","愛梨","MAHIRO初級","MAHIRO中級"],
+    "WS": ["WS_4/11Cocona練習会","WS_4/18Konoka練習会","WS_4/25Rena練習会"]
   };
 
-  const ALL_CLASSES = [
-    ...CLASSES_BY_DAY["月"],
-    ...CLASSES_BY_DAY["火"],
-    ...CLASSES_BY_DAY["水"],
-    ...CLASSES_BY_DAY["木"],
-    ...CLASSES_BY_DAY["金"],
-    ...CLASSES_BY_DAY["土"]
-  ];
+  function isMainSchoolClass(name){
+    const s = String(name || "");
+    if(!s) return false;
+    if(s.startsWith("WS_")) return false;
+    if(s.includes("K×G")) return false;
+    return true;
+  }
+
+  const FILTERED_BY_DAY = {};
+  DAY_ORDER.forEach(day => {
+    FILTERED_BY_DAY[day] = (CLASSES_BY_DAY[day] || []).filter(isMainSchoolClass);
+  });
 
   const metaRow = document.getElementById("metaRow");
   const currentClassBox = document.getElementById("currentClassBox");
   const memberInput = document.getElementById("memberInput");
   const statusBox = document.getElementById("statusBox");
+  const dayGrid = document.getElementById("dayGrid");
   const classGrid = document.getElementById("classGrid");
   const complete = document.getElementById("complete");
   const completeDetail = document.getElementById("completeDetail");
 
+  let selectedDay = "";
   let selectedClass = "";
   let submitting = false;
   let inputTimer = null;
@@ -210,16 +250,12 @@ input[type="text"]{
     try{
       let day = getTokyoWeekdayLabel();
       if(day === "日") day = "月";
-      if(!CLASSES_BY_DAY[day]) day = "月";
+      if(!FILTERED_BY_DAY[day]) day = "月";
       return day;
     }catch(e){
       return "月";
     }
   }
-
-  const todayDay = getTodayDayLabel();
-  const todayClassList = CLASSES_BY_DAY[todayDay] || [];
-  const defaultClass = todayClassList[0] || ALL_CLASSES[0] || "";
 
   function setStatus(text){
     statusBox.textContent = text;
@@ -283,10 +319,36 @@ input[type="text"]{
     focusInput();
   }
 
+  function renderDayButtons(){
+    dayGrid.innerHTML = "";
+
+    DAY_ORDER.forEach(day => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "day-btn" + (day === selectedDay ? " active" : "");
+      btn.textContent = day + "曜";
+
+      btn.onclick = () => {
+        selectedDay = day;
+        const list = FILTERED_BY_DAY[selectedDay] || [];
+        selectedClass = list[0] || "";
+        renderDayButtons();
+        renderClassButtons();
+        updateCurrentClassBox();
+        setStatus("読み取り待機中");
+        resetInputOnly();
+      };
+
+      dayGrid.appendChild(btn);
+    });
+  }
+
   function renderClassButtons(){
     classGrid.innerHTML = "";
 
-    ALL_CLASSES.forEach(className => {
+    const classList = FILTERED_BY_DAY[selectedDay] || [];
+
+    classList.forEach(className => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "class-select-btn" + (className === selectedClass ? " active" : "");
@@ -294,8 +356,8 @@ input[type="text"]{
 
       btn.onclick = () => {
         selectedClass = className;
-        updateCurrentClassBox();
         renderClassButtons();
+        updateCurrentClassBox();
         setStatus("読み取り待機中");
         resetInputOnly();
       };
@@ -346,6 +408,10 @@ input[type="text"]{
     const member = normalizeMemberSafe(rawValue);
 
     if(!member) return;
+    if(!selectedDay){
+      setStatus("先に曜日を選択してください");
+      return;
+    }
     if(!selectedClass){
       setStatus("先にクラスを選択してください");
       return;
@@ -417,12 +483,15 @@ input[type="text"]{
     }
   });
 
-  metaRow.innerHTML =
-    "本日の曜日：<b>" + escapeHtml(todayDay) + "曜</b> ／ 初期選択：<b>" + escapeHtml(defaultClass) + "</b>";
+  selectedDay = getTodayDayLabel();
+  selectedClass = (FILTERED_BY_DAY[selectedDay] || [])[0] || "";
 
-  selectedClass = defaultClass;
-  updateCurrentClassBox();
+  metaRow.innerHTML =
+    "本日の曜日：<b>" + escapeHtml(selectedDay) + "曜</b> ／ 初期選択：<b>" + escapeHtml(selectedClass || "なし") + "</b>";
+
+  renderDayButtons();
   renderClassButtons();
+  updateCurrentClassBox();
   setStatus("読み取り待機中");
   focusInput();
 
