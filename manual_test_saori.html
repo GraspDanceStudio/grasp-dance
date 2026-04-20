@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8" />
-<title>受付（手入力）</title>
+<title>受付（固定クラス：SAORI）</title>
 
 <script src="./shared.js?v=20260418-8"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -65,31 +65,19 @@ input[type="text"]{
   font-size: 24px;
   line-height: 1.6;
 }
-
-.section { display: none; }
-.section.active { display: block; }
 </style>
 </head>
 
 <body>
-<h2 id="title">会員番号を入力してください</h2>
+<h2 id="title">SAORI受付：QRまたは会員番号を入力してください</h2>
 
-<div id="sectionInput" class="section active">
-  <div class="input-box">
-    <input id="memberInput" type="text" placeholder="会員番号"/>
-  </div>
-  <button id="goBtn" class="class-btn" style="text-align:center;">
-    次へ（クラス選択）
-  </button>
+<div class="input-box">
+  <input id="memberInput" type="text" placeholder="会員番号 または QRのURL"/>
 </div>
 
-<div id="sectionSelect" class="section">
-  <div id="dayButtons"></div>
-  <div id="container"></div>
-  <button id="backBtn" class="day-btn" style="margin-top:10px;">
-    ← 会員番号入力に戻る
-  </button>
-</div>
+<button id="goBtn" class="class-btn" style="text-align:center;">
+  受付する（SAORI）
+</button>
 
 <div id="complete">
   <div id="completeBox">
@@ -100,32 +88,47 @@ input[type="text"]{
 
 <script>
 const FIXED_CLASS = "SAORI";
+
 const title = document.getElementById("title");
 const memberInput = document.getElementById("memberInput");
 const goBtn = document.getElementById("goBtn");
-const backBtn = document.getElementById("backBtn");
-const dayButtons = document.getElementById("dayButtons");
-const container = document.getElementById("container");
 const complete = document.getElementById("complete");
 const completeDetail = document.getElementById("completeDetail");
-const sectionInput = document.getElementById("sectionInput");
-const sectionSelect = document.getElementById("sectionSelect");
 
 let currentMember = "";
 let submitting = false;
-let selectedDay = "";
 
+// URL対応つきの安全版
 function normalizeMemberSafe(v){
   try{
     if(typeof normalizeMember === "function"){
       return normalizeMember(v);
     }
   }catch(e){}
-  return String(v || "")
-    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
-    .replace(/[^A-Za-z0-9\-_]/g, "")
-    .toUpperCase()
-    .trim();
+
+  let s = String(v || "").trim();
+
+  try{
+    if(/^https?:/i.test(s)){
+      const u = new URL(s);
+      s = u.searchParams.get("member") || s;
+    }
+  }catch(e){}
+
+  try{
+    s = decodeURIComponent(s);
+  }catch(e){}
+
+  s = s.split("?")[0].trim();
+
+  s = s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, ch =>
+    String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
+  );
+
+  s = s.replace(/[^A-Za-z0-9\-_]/g, "");
+  s = s.toUpperCase();
+
+  return s;
 }
 
 function escapeHtmlSafe(v){
@@ -142,15 +145,13 @@ function escapeHtmlSafe(v){
     .replaceAll("'","&#039;");
 }
 
+// 入力中の見た目は壊さず、全角だけ半角化
 memberInput.addEventListener("input", () => {
   let v = memberInput.value;
 
   v = v.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s =>
     String.fromCharCode(s.charCodeAt(0) - 0xFEE0)
   );
-
-  v = v.replace(/[^A-Za-z0-9\-_]/g, "");
-  v = v.toUpperCase();
 
   memberInput.value = v;
 });
@@ -162,30 +163,16 @@ memberInput.addEventListener("keydown", (e) => {
   }
 });
 
-function showInputScreen() {
-  sectionSelect.classList.remove("active");
-  sectionInput.classList.add("active");
-  title.textContent = "会員番号を入力してください";
-  currentMember = "";
-  submitting = false;
-  memberInput.value = "";
+function focusInput(){
   setTimeout(() => memberInput.focus(), 50);
 }
 
-function showSelectScreen() {
-  sectionInput.classList.remove("active");
-  sectionSelect.classList.add("active");
-
-  if (!selectedDay) {
-    try{
-      selectedDay = getTokyoWeekdayLabel();
-    }catch(e){
-      selectedDay = "月";
-    }
-    if (selectedDay === "日") selectedDay = "土";
-  }
-
-  renderAll();
+function resetForm(){
+  currentMember = "";
+  window.currentMember = "";
+  submitting = false;
+  memberInput.value = "";
+  focusInput();
 }
 
 async function submit(classNames){
@@ -196,51 +183,43 @@ async function submit(classNames){
   const member = normalizeMemberSafe(window.currentMember);
   const classes = Array.isArray(classNames) ? classNames : [classNames];
 
-  const requests = classes.map(className => {
-    const url =
-      APP_CONFIG.FORM_RESPONSE +
-      "?" + APP_CONFIG.ENTRY_MEMBER + "=" + encodeURIComponent(member) +
-      "&" + APP_CONFIG.ENTRY_CLASS + "=" + encodeURIComponent(className);
+  if(!member){
+    alert("会員番号が取得できませんでした");
+    submitting = false;
+    focusInput();
+    return;
+  }
 
-    return fetch(url, { method: "POST", mode: "no-cors" })
-      .catch(e => console.log("submit fetch error", e));
-  });
-
-  await Promise.all(requests);
-
-  completeDetail.innerHTML =
-    "会員番号：<b>" + escapeHtmlSafe(member) + "</b><br>" +
-    "クラス：<b>" + classes.map(c => escapeHtmlSafe(c)).join("<br>") + "</b><br><br>" +
-    "次の会員を入力してください";
-
-  complete.style.display = "flex";
-
-  setTimeout(() => {
-    complete.style.display = "none";
-    showInputScreen();
-  }, 1200);
-}
-
-function renderAll() {
   try{
-    renderDayButtons({
-      dayButtonsEl: dayButtons,
-      selectedDay,
-      onSelect: (day) => {
-        selectedDay = day;
-        renderAll();
-      }
+    const requests = classes.map(className => {
+      const url =
+        APP_CONFIG.FORM_RESPONSE +
+        "?" + APP_CONFIG.ENTRY_MEMBER + "=" + encodeURIComponent(member) +
+        "&" + APP_CONFIG.ENTRY_CLASS + "=" + encodeURIComponent(className);
+
+      return fetch(url, { method: "POST", mode: "no-cors" })
+        .catch(e => console.log("submit fetch error", e));
     });
 
-    renderClasses({
-      day: selectedDay,
-      titleEl: title,
-      containerEl: container,
-      onSubmit: submit
-    });
+    await Promise.all(requests);
+
+    completeDetail.innerHTML =
+      "会員番号：<b>" + escapeHtmlSafe(member) + "</b><br>" +
+      "クラス：<b>" + classes.map(c => escapeHtmlSafe(c)).join("<br>") + "</b><br><br>" +
+      "次の会員を入力してください";
+
+    complete.style.display = "flex";
+
+    setTimeout(() => {
+      complete.style.display = "none";
+      resetForm();
+    }, 1200);
+
   }catch(e){
-    console.log("renderAll error", e);
-    alert("画面表示エラー");
+    console.log("submit error", e);
+    alert("送信エラー");
+    submitting = false;
+    focusInput();
   }
 }
 
@@ -249,28 +228,22 @@ goBtn.onclick = async () => {
 
   if (!v) {
     alert("会員番号を入力してください");
+    focusInput();
     return;
   }
 
   currentMember = v;
   window.currentMember = v;
 
-  await submit([FIXED_CLASS]); // ←ここがポイント
+  await submit([FIXED_CLASS]);
 };
-
-backBtn.onclick = () => showInputScreen();
 
 (async () => {
   try{
     await initLiffSafe();
   }catch(e){}
-  showInputScreen();
+  resetForm();
 })();
-
-  setTimeout(() => {
-  memberInput.focus();
-}, 100);
-  
 </script>
 
 </body>
