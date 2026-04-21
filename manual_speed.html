@@ -233,13 +233,17 @@ input[type="text"]{
 
   async function sendMonitor(data){
   try{
-    await fetch(
+    console.log("sendMonitor start", data);
+
+    const res = await fetch(
       "https://script.google.com/macros/s/AKfycbyDXdx9X52sngmExXxSpn7BbcWRRTLfUvZMsjXsvQa8psm9nD2XBHuAAVv5ovrwVhoy/exec",
       {
         method: "POST",
         body: JSON.stringify(data)
       }
     );
+
+    console.log("sendMonitor done", res);
   }catch(e){
     console.log("monitor error", e);
   }
