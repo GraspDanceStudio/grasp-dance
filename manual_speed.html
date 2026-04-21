@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <title>受付（曜日切替・自動送信）</title>
 
-<script src="./shared.js?v=20260420-5"></script>
+<script src="./shared.js?v=20260421-1"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
@@ -50,8 +50,22 @@ input[type="text"]{
 .status-box {
   font-size: 20px;
   font-weight: 700;
-  margin: 8px 0 16px;
+  margin: 8px 0 10px;
   line-height: 1.6;
+}
+
+.scan-debug-box {
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f7f7f7;
+  color: #333;
+}
+
+.scan-debug-box b {
+  font-weight: 800;
 }
 
 .section-title {
@@ -179,14 +193,28 @@ input[type="text"]{
 </div>
 
 <div class="input-box">
-  <input id="memberInput" type="text" placeholder="QRのURL / 会員番号 / 体験番号" autocomplete="off" autocapitalize="off" />
+  <input
+    id="memberInput"
+    type="text"
+    placeholder="QRのURL / 会員番号 / 体験番号"
+    autocomplete="off"
+    autocapitalize="off"
+    autocorrect="off"
+    spellcheck="false"
+    inputmode="text"
+  />
   <div class="helper-text">
-    曜日とクラスを確認してから、QRを読むかURLを貼り付けてください。<br>
-    QRリーダー導入後は、この入力欄に自動で入る想定です。
+    QRを読むと、この欄に自動入力されてそのまま受付されます。<br>
+    PC本番運用向けです。iPhoneは確認用として使う想定です。
   </div>
 </div>
 
 <div id="statusBox" class="status-box">初期設定中…</div>
+
+<div id="scanDebugBox" class="scan-debug-box">
+  直近読取：<b>---</b><br>
+  抽出会員番号：<b>---</b>
+</div>
 
 <div class="section-title">曜日</div>
 <div id="dayGrid" class="day-grid"></div>
@@ -217,6 +245,11 @@ input[type="text"]{
     "WS": ["WS_4/11Cocona練習会","WS_4/18Konoka練習会","WS_4/25Rena練習会"]
   };
 
+  const MIN_VALID_LENGTH = 3;
+  const DUPLICATE_RESET_MS = 900;
+  const COMPLETE_RESET_MS = 1000;
+  const INPUT_SETTLE_MS = 220;
+
   function isMainSchoolClass(name){
     const s = String(name || "");
     if(!s) return false;
@@ -234,6 +267,7 @@ input[type="text"]{
   const currentClassBox = document.getElementById("currentClassBox");
   const memberInput = document.getElementById("memberInput");
   const statusBox = document.getElementById("statusBox");
+  const scanDebugBox = document.getElementById("scanDebugBox");
   const dayGrid = document.getElementById("dayGrid");
   const classGrid = document.getElementById("classGrid");
   const complete = document.getElementById("complete");
@@ -243,26 +277,63 @@ input[type="text"]{
   let selectedClass = "";
   let submitting = false;
   let inputTimer = null;
-  let lastProcessedValue = "";
   let resetTimer = null;
-
-  function getTodayDayLabel(){
-    try{
-      let day = getTokyoWeekdayLabel();
-      if(day === "日") day = "月";
-      if(!FILTERED_BY_DAY[day]) day = "月";
-      return day;
-    }catch(e){
-      return "月";
-    }
-  }
+  let lastProcessedMember = "";
+  let lastInputSnapshot = "";
 
   function setStatus(text){
     statusBox.textContent = text;
   }
 
-  function focusInput(){
-    setTimeout(() => memberInput.focus(), 50);
+  function updateScanDebug(raw, member){
+    const rawText = raw ? escapeHtml(shortenText(raw, 80)) : "---";
+    const memberText = member ? escapeHtml(member) : "---";
+
+    scanDebugBox.innerHTML =
+      "直近読取：<b>" + rawText + "</b><br>" +
+      "抽出会員番号：<b>" + memberText + "</b>";
+  }
+
+  function shortenText(text, max){
+    const s = String(text || "");
+    if(s.length <= max) return s;
+    return s.slice(0, max) + "…";
+  }
+
+  function focusInput(forceSelect = false){
+    setTimeout(() => {
+      try{
+        memberInput.focus({ preventScroll: true });
+      }catch(e){
+        memberInput.focus();
+      }
+
+      if(forceSelect){
+        try{
+          memberInput.select();
+        }catch(e){}
+      }
+    }, 30);
+  }
+
+  function keepInputFocus(){
+    window.addEventListener("click", () => {
+      if(document.activeElement !== memberInput){
+        focusInput(false);
+      }
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if(!document.hidden){
+        focusInput(false);
+      }
+    });
+
+    setInterval(() => {
+      if(!submitting && document.activeElement !== memberInput){
+        focusInput(false);
+      }
+    }, 1200);
   }
 
   function updateCurrentClassBox(){
@@ -276,14 +347,42 @@ input[type="text"]{
     }
   }
 
-  // 全角英数を半角へ
+  function getTodayDayLabel(){
+    try{
+      let day = getTokyoWeekdayLabel();
+      if(day === "日") day = "月";
+      if(!FILTERED_BY_DAY[day]) day = "月";
+      return day;
+    }catch(e){
+      return "月";
+    }
+  }
+
+  function clearTimers(){
+    if(inputTimer){
+      clearTimeout(inputTimer);
+      inputTimer = null;
+    }
+    if(resetTimer){
+      clearTimeout(resetTimer);
+      resetTimer = null;
+    }
+  }
+
+  function resetInputOnly(){
+    clearTimers();
+    memberInput.value = "";
+    lastInputSnapshot = "";
+    lastProcessedMember = "";
+    focusInput(false);
+  }
+
   function toHalfWidthAscii(str){
     return String(str || "").replace(/[！-～]/g, ch =>
       String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
     );
   }
 
-  // URLっぽい日本語混じり入力をASCII寄りに直す
   function normalizeRawInputForUrl(value){
     let s = String(value || "");
 
@@ -294,60 +393,109 @@ input[type="text"]{
       "、": ",",
       "・": "/",
       "：": ":",
+      "；": ";",
       "？": "?",
+      "！": "!",
+      "＆": "&",
       "＝": "=",
       "＿": "_",
       "－": "-",
+      "―": "-",
+      "ー": "-",
       "／": "/",
+      "＼": "\\",
+      "（": "(",
+      "）": ")",
+      "［": "[",
+      "］": "]",
+      "｛": "{",
+      "｝": "}",
       "　": " ",
-      "ぃ": "l",
-      "ね": "n",
-      "め": "m"
+      "”": "\"",
+      "’": "'",
+      "＋": "+",
+      "％": "%",
+      "＃": "#"
     };
 
-    s = s.replace(/[。、・：？＝＿－／　ぃねめ]/g, ch => map[ch] || ch);
+    s = s.replace(/[。、・：；？！＆＝＿－―ー／＼（）［］｛｝　”’＋％＃]/g, ch => map[ch] || ch);
+
+    return s.trim();
+  }
+
+  function cleanupScanNoise(value){
+    let s = String(value || "");
+
+    s = normalizeRawInputForUrl(s);
+    s = s.replace(/\s+/g, "");
+    s = s.replace(/[<>]/g, "");
 
     return s;
   }
 
-  function normalizeMemberSafe(v){
+  function extractMemberFromRaw(rawValue){
+    let raw = cleanupScanNoise(rawValue);
+    if(!raw) return "";
+
+    // 共有関数があれば最優先
     try{
       if(typeof normalizeMember === "function"){
-        return normalizeMember(v);
+        const libResult = normalizeMember(raw);
+        if(libResult){
+          return String(libResult).trim();
+        }
       }
     }catch(e){}
 
-    let s = String(v || "").trim();
-    s = normalizeRawInputForUrl(s);
-
+    let decoded = raw;
     try{
-      if(/^https?:/i.test(s)){
-        const u = new URL(s);
-        s = u.searchParams.get("member") || s;
+      decoded = decodeURIComponent(raw);
+    }catch(e){}
+
+    const candidates = [raw, decoded];
+
+    for(const source of candidates){
+      // 1) member= を最優先
+      const m1 = source.match(/[?&]member=([A-Za-z0-9\-_]+)/i);
+      if(m1 && m1[1]){
+        return String(m1[1]).trim().toUpperCase();
       }
-    }catch(e){}
 
-    try{
-      s = decodeURIComponent(s);
-    }catch(e){}
+      const m2 = source.match(/member=([A-Za-z0-9\-_]+)/i);
+      if(m2 && m2[1]){
+        return String(m2[1]).trim().toUpperCase();
+      }
 
-    s = s.split("?")[0].trim();
-    s = toHalfWidthAscii(s);
-    s = s.replace(/[^A-Za-z0-9\-_]/g, "");
-    s = s.toUpperCase();
+      // 2) 末尾7～8桁数字を救済
+      const m3 = source.match(/(\d{7,8})(?!.*\d)/);
+      if(m3 && m3[1]){
+        return m3[1];
+      }
 
-    return s;
-  }
-
-  function resetInputOnly(){
-    if(resetTimer){
-      clearTimeout(resetTimer);
-      resetTimer = null;
+      // 3) 文字列全体が番号っぽい場合
+      const m4 = source.match(/^[A-Za-z0-9\-_]+$/);
+      if(m4){
+        const token = source.toUpperCase();
+        if(token.length >= MIN_VALID_LENGTH){
+          return token;
+        }
+      }
     }
 
-    memberInput.value = "";
-    lastProcessedValue = "";
-    focusInput();
+    return "";
+  }
+
+  function isObviouslyInvalidScan(rawValue, member){
+    const raw = String(rawValue || "").trim();
+    const m = String(member || "").trim();
+
+    if(!raw) return true;
+    if(raw.length < MIN_VALID_LENGTH && !m) return true;
+
+    // 「5」だけ等を排除
+    if(/^\d{1,2}$/.test(raw) && !m) return true;
+
+    return false;
   }
 
   function renderDayButtons(){
@@ -367,6 +515,7 @@ input[type="text"]{
         renderClassButtons();
         updateCurrentClassBox();
         setStatus("読み取り待機中");
+        updateScanDebug("", "");
         resetInputOnly();
       };
 
@@ -390,6 +539,7 @@ input[type="text"]{
         renderClassButtons();
         updateCurrentClassBox();
         setStatus("読み取り待機中");
+        updateScanDebug("", "");
         resetInputOnly();
       };
 
@@ -398,67 +548,75 @@ input[type="text"]{
   }
 
   async function submitFixedClass(member, className){
-    if(submitting) return;
-    submitting = true;
+    const url =
+      APP_CONFIG.FORM_RESPONSE +
+      "?" + APP_CONFIG.ENTRY_MEMBER + "=" + encodeURIComponent(member) +
+      "&" + APP_CONFIG.ENTRY_CLASS + "=" + encodeURIComponent(className);
 
-    try{
-      completeDetail.innerHTML =
-        "<span class='complete-title'>✅ 受付完了</span><br><br>" +
-        "会員番号：<b>" + escapeHtml(member) + "</b><br>" +
-        "クラス：<b>" + escapeHtml(className) + "</b>";
+    await fetch(url, { method: "POST", mode: "no-cors" });
+  }
 
-      complete.style.display = "flex";
+  function showComplete(member, className){
+    completeDetail.innerHTML =
+      "<span class='complete-title'>✅ 受付完了</span><br><br>" +
+      "会員番号：<b>" + escapeHtml(member) + "</b><br>" +
+      "クラス：<b>" + escapeHtml(className) + "</b>";
 
-      const url =
-        APP_CONFIG.FORM_RESPONSE +
-        "?" + APP_CONFIG.ENTRY_MEMBER + "=" + encodeURIComponent(member) +
-        "&" + APP_CONFIG.ENTRY_CLASS + "=" + encodeURIComponent(className);
+    complete.style.display = "flex";
+  }
 
-      await fetch(url, { method:"POST", mode:"no-cors" });
-
-      setStatus("受付完了");
-
-      resetTimer = setTimeout(() => {
-        complete.style.display = "none";
-        submitting = false;
-        resetInputOnly();
-        setStatus("読み取り待機中");
-      }, 1000);
-
-    }catch(e){
-      console.log("submitFixedClass error", e);
-      complete.style.display = "none";
-      alert("送信エラー");
-      submitting = false;
-      setStatus("送信エラー");
-      focusInput();
-    }
+  function hideComplete(){
+    complete.style.display = "none";
   }
 
   async function processReception(rawValue){
-    const member = normalizeMemberSafe(rawValue);
+    const raw = cleanupScanNoise(rawValue);
+    const member = extractMemberFromRaw(raw);
 
-    if(!member) return;
+    updateScanDebug(raw, member);
+
+    if(isObviouslyInvalidScan(raw, member)){
+      setStatus("読み取り待機中");
+      return;
+    }
+
+    if(!member){
+      setStatus("会員番号を抽出できませんでした");
+      resetTimer = setTimeout(() => {
+        resetInputOnly();
+        setStatus("読み取り待機中");
+        updateScanDebug("", "");
+      }, 900);
+      return;
+    }
+
     if(!selectedDay){
       setStatus("先に曜日を選択してください");
       return;
     }
+
     if(!selectedClass){
       setStatus("先にクラスを選択してください");
       return;
     }
-    if(submitting) return;
-    if(member === lastProcessedValue) return;
 
-    lastProcessedValue = member;
+    if(submitting) return;
+
+    if(member === lastProcessedMember){
+      return;
+    }
+
+    lastProcessedMember = member;
     window.currentMember = member;
 
     try{
+      submitting = true;
       setStatus("受付済み確認中…");
 
       const duplicate = await checkDuplicate(member, selectedClass);
 
       if(duplicate){
+        submitting = false;
         setStatus("本日受付済み");
         alert(
           "この会員は本日すでに受付済みです。\n\n" +
@@ -469,28 +627,45 @@ input[type="text"]{
         resetTimer = setTimeout(() => {
           resetInputOnly();
           setStatus("読み取り待機中");
-        }, 700);
+          updateScanDebug("", "");
+        }, DUPLICATE_RESET_MS);
 
         return;
       }
 
       setStatus("送信中…");
+      showComplete(member, selectedClass);
       await submitFixedClass(member, selectedClass);
+
+      setStatus("受付完了");
+
+      resetTimer = setTimeout(() => {
+        hideComplete();
+        submitting = false;
+        resetInputOnly();
+        setStatus("読み取り待機中");
+        updateScanDebug("", "");
+      }, COMPLETE_RESET_MS);
 
     }catch(e){
       console.log("processReception error", e);
-      alert("受付エラー");
+      hideComplete();
       submitting = false;
       setStatus("受付エラー");
-      focusInput();
+      alert("受付エラー");
+      focusInput(false);
     }
   }
 
   memberInput.addEventListener("input", () => {
     let v = memberInput.value;
-
-    v = normalizeRawInputForUrl(v);
+    v = cleanupScanNoise(v);
     memberInput.value = v;
+
+    if(v === lastInputSnapshot){
+      return;
+    }
+    lastInputSnapshot = v;
 
     if(inputTimer){
       clearTimeout(inputTimer);
@@ -498,7 +673,7 @@ input[type="text"]{
 
     inputTimer = setTimeout(async () => {
       await processReception(memberInput.value);
-    }, 250);
+    }, INPUT_SETTLE_MS);
   });
 
   memberInput.addEventListener("keydown", async (e) => {
@@ -506,8 +681,15 @@ input[type="text"]{
       e.preventDefault();
       if(inputTimer){
         clearTimeout(inputTimer);
+        inputTimer = null;
       }
       await processReception(memberInput.value);
+    }
+  });
+
+  memberInput.addEventListener("blur", () => {
+    if(!submitting){
+      focusInput(false);
     }
   });
 
@@ -520,8 +702,10 @@ input[type="text"]{
   renderDayButtons();
   renderClassButtons();
   updateCurrentClassBox();
+  updateScanDebug("", "");
   setStatus("読み取り待機中");
-  focusInput();
+  focusInput(false);
+  keepInputFocus();
 
 })();
 </script>
