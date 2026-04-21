@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>受付モニター</title>
+
+<style>
+body{
+  font-family:sans-serif;
+  text-align:center;
+  padding:20px;
+}
+
+.status{
+  font-size:48px;
+  font-weight:900;
+  margin:20px 0;
+}
+
+.ok{ color:#2ecc71; }
+.ng{ color:#e74c3c; }
+
+.member{
+  font-size:36px;
+  margin:10px 0;
+}
+
+.class{
+  font-size:28px;
+}
+
+.time{
+  margin-top:20px;
+  color:#666;
+}
+</style>
+</head>
+
+<body>
+
+<div id="status" class="status">---</div>
+<div id="member" class="member"></div>
+<div id="class" class="class"></div>
+<div id="time" class="time"></div>
+
+<script>
+
+const URL = "https://docs.google.com/spreadsheets/d/あなたのID/gviz/tq?tqx=out:json&sheet=受付モニター";
+
+async function load(){
+  const res = await fetch(URL);
+  const text = await res.text();
+
+  const json = JSON.parse(text.substring(text.indexOf("{"), text.lastIndexOf("}") + 1));
+  const row = json.table.rows[0];
+
+  if(!row) return;
+
+  const time = row.c[0]?.f || "";
+  const cls = row.c[1]?.v || "";
+  const member = row.c[3]?.v || "";
+  const status = row.c[4]?.v || "";
+
+  const statusEl = document.getElementById("status");
+
+  statusEl.textContent = status;
+
+  statusEl.className =
+    "status " +
+    (status === "OK" ? "ok" : "ng");
+
+  document.getElementById("member").textContent = member;
+  document.getElementById("class").textContent = cls;
+  document.getElementById("time").textContent = time;
+}
+
+setInterval(load, 1500);
+load();
+
+</script>
+
+</body>
+</html>
