@@ -231,6 +231,20 @@ input[type="text"]{
 <script>
 (async () => {
 
+  async function sendMonitor(data){
+  try{
+    await fetch(
+      "https://script.google.com/macros/s/AKfycbyDXdx9X52sngmExXxSpn7BbcWRRTLfUvZMsjXsvQa8psm9nD2XBHuAAVv5ovrwVhoy/exec",
+      {
+        method: "POST",
+        body: JSON.stringify(data)
+      }
+    );
+  }catch(e){
+    console.log("monitor error", e);
+  }
+}
+
   await initLiffSafe();
 
   const DAY_ORDER = ["月","火","水","木","金","土"];
