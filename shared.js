@@ -66,6 +66,24 @@
     return map.year || String(new Date().getFullYear());
   }
 
+  // ===== 東京の年月 =====
+  function getTokyoYearMonth(){
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric",
+      month: "2-digit"
+    }).formatToParts(new Date());
+
+    const map = {};
+    parts.forEach(p => {
+      if(p.type !== "literal"){
+        map[p.type] = p.value;
+      }
+    });
+
+    return `${map.year}-${map.month}`;
+  }
+
   // ===== 今日の曜日 =====
   window.getTokyoWeekdayLabel = function(){
     const wd = new Intl.DateTimeFormat("en-US", {
@@ -91,9 +109,69 @@
       .replaceAll("'","&#039;");
   };
 
-  // ===== 会員番号整形（英数字 + - _ 対応） =====
+  // ===== 全角英数記号を半角へ =====
+  function toHalfWidthAscii(str){
+    return String(str || "").replace(/[！-～]/g, ch =>
+      String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
+    );
+  }
+
+  // ===== URLっぽい崩れを補正 =====
+  function normalizeRawInputForUrl(value){
+    let s = String(value || "");
+
+    s = toHalfWidthAscii(s);
+
+    const map = {
+      "。": ".",
+      "、": ",",
+      "・": "/",
+      "：": ":",
+      "；": ";",
+      "？": "?",
+      "！": "!",
+      "＆": "&",
+      "＝": "=",
+      "＿": "_",
+      "－": "-",
+      "―": "-",
+      "ー": "-",
+      "／": "/",
+      "＼": "\\",
+      "（": "(",
+      "）": ")",
+      "［": "[",
+      "］": "]",
+      "｛": "{",
+      "｝": "}",
+      "　": " ",
+      "”": "\"",
+      "’": "'",
+      "＋": "+",
+      "％": "%",
+      "＃": "#",
+      "ぃ": "l",
+      "ね": "n",
+      "め": "m"
+    };
+
+    s = s.replace(/[。、・：；？！＆＝＿－―ー／＼（）［］｛｝　”’＋％＃ぃねめ]/g, ch => map[ch] || ch);
+
+    return s.trim();
+  }
+
+  function cleanupScanNoise(value){
+    let s = normalizeRawInputForUrl(value);
+    s = s.replace(/\s+/g, "");
+    s = s.replace(/[<>]/g, "");
+    return s;
+  }
+
+  // ===== 会員番号整形（英数字 + - _ 対応 / 崩れたURL救済対応） =====
   window.normalizeMember = function(value){
-    let s = String(value || "").trim();
+    let s = cleanupScanNoise(value);
+
+    if(!s) return "";
 
     try{
       if(/^https?:/i.test(s)){
@@ -106,16 +184,40 @@
       s = decodeURIComponent(s);
     }catch(e){}
 
-    s = s.split("?")[0].trim();
+    const candidates = [String(s || ""), cleanupScanNoise(s)];
 
-    s = s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, ch =>
-      String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
-    );
+    for(const source of candidates){
+      const m1 = source.match(/[?&]member=([A-Za-z0-9\-_]+)/i);
+      if(m1 && m1[1]){
+        return String(m1[1]).trim().toUpperCase();
+      }
 
+      const m2 = source.match(/member=([A-Za-z0-9\-_]+)/i);
+      if(m2 && m2[1]){
+        return String(m2[1]).trim().toUpperCase();
+      }
+    }
+
+    try{
+      s = decodeURIComponent(s);
+    }catch(e){}
+
+    s = String(s || "").split("?")[0].trim();
+    s = cleanupScanNoise(s);
     s = s.replace(/[^A-Za-z0-9\-_]/g, "");
     s = s.toUpperCase();
 
-    return s;
+    if(s){
+      return s;
+    }
+
+    const raw = cleanupScanNoise(value);
+    const tailNum = raw.match(/(\d{7,8})(?!.*\d)/);
+    if(tailNum && tailNum[1]){
+      return tailNum[1];
+    }
+
+    return "";
   };
 
   // ===== 会員番号比較 =====
@@ -394,6 +496,12 @@
     removeLocalPendingClasses(member, classNames);
   }
 
+  // ===== manual_speed.html からも使えるよう公開 =====
+  window.addLocalPendingClasses = addLocalPendingClasses;
+  window.removeLocalPendingClasses = removeLocalPendingClasses;
+  window.addLocalConfirmedClasses = addLocalConfirmedClasses;
+  window.promotePendingToConfirmed = promotePendingToConfirmed;
+
   // ===== 曜日ボタン =====
   window.renderDayButtons = function({ dayButtonsEl, selectedDay, onSelect }){
     dayButtonsEl.innerHTML = "";
@@ -466,8 +574,6 @@
 
   // =========================================================
   // 重複チェック
-  // 数字のみ同士 → 数値比較
-  // 英字/ハイフン入り → 文字列比較
   // =========================================================
 
   function getDuplicateCacheKey(member, date){
@@ -944,11 +1050,7 @@
   window.fetchCount = async function(member){
 
     const cleanMember = window.normalizeMember(member);
-
-    const now = new Date();
-    const ym =
-      now.getFullYear() + "-" +
-      String(now.getMonth() + 1).padStart(2, "0");
+    const ym = getTokyoYearMonth();
 
     const url =
       "https://docs.google.com/spreadsheets/d/" +
@@ -1022,8 +1124,8 @@
   };
 
   // ===== 単体重複チェック =====
-  window.checkDuplicate = async function(member, className){
-    const duplicates = await window.getTodayDuplicateClasses(member, [className], true);
+  window.checkDuplicate = async function(member, className, forceRefresh = true){
+    const duplicates = await window.getTodayDuplicateClasses(member, [className], forceRefresh);
     return duplicates.includes(normalizeClassName(className));
   };
 
