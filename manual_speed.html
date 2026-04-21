@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <title>受付（曜日切替・自動送信）</title>
 
-<script src="./shared.js?v=20260420-4"></script>
+<script src="./shared.js?v=20260420-5"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
@@ -276,6 +276,40 @@ input[type="text"]{
     }
   }
 
+  // 全角英数を半角へ
+  function toHalfWidthAscii(str){
+    return String(str || "").replace(/[！-～]/g, ch =>
+      String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
+    );
+  }
+
+  // URLっぽい日本語混じり入力をASCII寄りに直す
+  function normalizeRawInputForUrl(value){
+    let s = String(value || "");
+
+    s = toHalfWidthAscii(s);
+
+    const map = {
+      "。": ".",
+      "、": ",",
+      "・": "/",
+      "：": ":",
+      "？": "?",
+      "＝": "=",
+      "＿": "_",
+      "－": "-",
+      "／": "/",
+      "　": " ",
+      "ぃ": "l",
+      "ね": "n",
+      "め": "m"
+    };
+
+    s = s.replace(/[。、・：？＝＿－／　ぃねめ]/g, ch => map[ch] || ch);
+
+    return s;
+  }
+
   function normalizeMemberSafe(v){
     try{
       if(typeof normalizeMember === "function"){
@@ -284,6 +318,7 @@ input[type="text"]{
     }catch(e){}
 
     let s = String(v || "").trim();
+    s = normalizeRawInputForUrl(s);
 
     try{
       if(/^https?:/i.test(s)){
@@ -297,11 +332,7 @@ input[type="text"]{
     }catch(e){}
 
     s = s.split("?")[0].trim();
-
-    s = s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, ch =>
-      String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
-    );
-
+    s = toHalfWidthAscii(s);
     s = s.replace(/[^A-Za-z0-9\-_]/g, "");
     s = s.toUpperCase();
 
@@ -458,10 +489,7 @@ input[type="text"]{
   memberInput.addEventListener("input", () => {
     let v = memberInput.value;
 
-    v = v.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s =>
-      String.fromCharCode(s.charCodeAt(0) - 0xFEE0)
-    );
-
+    v = normalizeRawInputForUrl(v);
     memberInput.value = v;
 
     if(inputTimer){
