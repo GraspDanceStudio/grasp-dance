@@ -500,6 +500,9 @@ input[type="text"]{
   function isKnownBrokenPrefix(raw){
     const s = String(raw || "").toLowerCase();
 
+    // member= が見えているなら正常候補
+    if(s.includes("member=")) return false;
+
     return (
       s === "http" ||
       s === "https" ||
@@ -511,14 +514,15 @@ input[type="text"]{
       s === "httpsliffli" ||
       s === "httpslifflin" ||
       s === "httpsliffline" ||
-      s.startsWith("httpsliff") ||
-      s.startsWith("http://") ||
-      s.startsWith("https://") ||
+      s === "httpslifflineme" ||
+      s === "http://" ||
+      s === "https://" ||
       s === "liff" ||
       s === "liffl" ||
       s === "liffli" ||
       s === "lifflin" ||
-      s === "liffline"
+      s === "liffline" ||
+      s === "lifflineme"
     );
   }
 
