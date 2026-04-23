@@ -232,22 +232,22 @@ input[type="text"]{
 (async () => {
 
   async function sendMonitor(data){
-  try{
-    console.log("sendMonitor start", data);
+    try{
+      console.log("sendMonitor start", data);
 
-    const res = await fetch(
-      "https://script.google.com/macros/s/AKfycbyDXdx9X52sngmExXxSpn7BbcWRRTLfUvZMsjXsvQa8psm9nD2XBHuAAVv5ovrwVhoy/exec",
-      {
-        method: "POST",
-        body: JSON.stringify(data)
-      }
-    );
+      const res = await fetch(
+        "https://script.google.com/macros/s/AKfycbyDXdx9X52sngmExXxSpn7BbcWRRTLfUvZMsjXsvQa8psm9nD2XBHuAAVv5ovrwVhoy/exec",
+        {
+          method: "POST",
+          body: JSON.stringify(data)
+        }
+      );
 
-    console.log("sendMonitor done", res);
-  }catch(e){
-    console.log("monitor error", e);
+      console.log("sendMonitor done", res);
+    }catch(e){
+      console.log("monitor error", e);
+    }
   }
-}
 
   await initLiffSafe();
 
@@ -625,6 +625,14 @@ input[type="text"]{
     }
 
     if(!member){
+      await sendMonitor({
+        class: selectedClass,
+        raw: rawValue,
+        member: "",
+        status: "NG",
+        message: "読取失敗"
+      });
+
       setStatus("会員番号を抽出できませんでした");
       resetTimer = setTimeout(() => {
         resetInputOnly();
@@ -662,6 +670,14 @@ input[type="text"]{
       const duplicate = await checkDuplicate(member, selectedClass, true);
 
       if(duplicate){
+        await sendMonitor({
+          class: selectedClass,
+          raw: rawValue,
+          member: member,
+          status: "重複",
+          message: "本日受付済み"
+        });
+
         submitting = false;
         setStatus("本日受付済み");
         alert(
@@ -683,6 +699,14 @@ input[type="text"]{
       showComplete(member, selectedClass);
 
       await submitFixedClass(member, selectedClass);
+
+      await sendMonitor({
+        class: selectedClass,
+        raw: rawValue,
+        member: member,
+        status: "OK",
+        message: "受付完了"
+      });
 
       setStatus("受付完了");
 
