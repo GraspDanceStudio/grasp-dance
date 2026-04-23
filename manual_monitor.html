@@ -9,75 +9,167 @@
 body{
   font-family:sans-serif;
   text-align:center;
-  padding:20px;
+  padding:20px 16px;
+  margin:0;
+  background:#ffffff;
+  color:#111;
+}
+
+.wrapper{
+  max-width:700px;
+  margin:0 auto;
+}
+
+.title{
+  font-size:20px;
+  font-weight:700;
+  color:#666;
+  margin-bottom:18px;
 }
 
 .status{
-  font-size:48px;
+  font-size:72px;
   font-weight:900;
-  margin:20px 0;
+  margin:16px 0 20px;
+  line-height:1.1;
 }
 
-.ok{ color:#2ecc71; }
-.ng{ color:#e74c3c; }
+.ok{
+  color:#1f9d55;
+}
+
+.ng{
+  color:#d93025;
+}
+
+.wait{
+  color:#777;
+}
 
 .member{
-  font-size:36px;
-  margin:10px 0;
+  font-size:48px;
+  font-weight:800;
+  margin:12px 0;
+  line-height:1.2;
+  word-break:break-word;
 }
 
 .class{
-  font-size:28px;
+  font-size:34px;
+  font-weight:700;
+  margin:8px 0 18px;
+  line-height:1.4;
+  word-break:break-word;
+}
+
+.message{
+  font-size:24px;
+  color:#444;
+  margin:8px 0 20px;
+  min-height:1.5em;
 }
 
 .time{
-  margin-top:20px;
+  margin-top:10px;
+  font-size:22px;
   color:#666;
+}
+
+@media (max-width: 480px){
+  .status{
+    font-size:60px;
+  }
+
+  .member{
+    font-size:40px;
+  }
+
+  .class{
+    font-size:28px;
+  }
+
+  .message{
+    font-size:22px;
+  }
+
+  .time{
+    font-size:20px;
+  }
 }
 </style>
 </head>
 
 <body>
 
-<div id="status" class="status">---</div>
-<div id="member" class="member"></div>
-<div id="class" class="class"></div>
-<div id="time" class="time"></div>
+<div class="wrapper">
+  <div class="title">受付モニター</div>
+  <div id="status" class="status wait">待機中</div>
+  <div id="member" class="member">---</div>
+  <div id="class" class="class">---</div>
+  <div id="message" class="message"></div>
+  <div id="time" class="time">---</div>
+</div>
 
 <script>
-
 const URL = "https://docs.google.com/spreadsheets/d/1z7xSOOjsXyuQn5p9aE3tl5fgzIMkxoLKVnnpTYUTS9k/gviz/tq?tqx=out:json&sheet=受付モニター";
 
-async function load(){
-  const res = await fetch(URL);
-  const text = await res.text();
-
-  const json = JSON.parse(text.substring(text.indexOf("{"), text.lastIndexOf("}") + 1));
-  const row = json.table.rows[0];
-
-  if(!row) return;
-
-  const time = row.c[0]?.f || "";
-  const cls = row.c[1]?.v || "";
-  const member = row.c[3]?.v || "";
-  const status = row.c[4]?.v || "";
-
-  const statusEl = document.getElementById("status");
-
-  statusEl.textContent = status;
-
-  statusEl.className =
-    "status " +
-    (status === "OK" ? "ok" : "ng");
-
-  document.getElementById("member").textContent = member;
-  document.getElementById("class").textContent = cls;
-  document.getElementById("time").textContent = time;
+function safeCell(row, index){
+  const cell = row?.c?.[index];
+  return cell?.f ?? cell?.v ?? "";
 }
 
-setInterval(load, 1500);
-load();
+async function load(){
+  try{
+    const res = await fetch(URL, { cache: "no-store" });
+    const text = await res.text();
 
+    const json = JSON.parse(
+      text.substring(text.indexOf("{"), text.lastIndexOf("}") + 1)
+    );
+
+    const row = json.table?.rows?.[0];
+    if(!row) return;
+
+    const time = safeCell(row, 0);
+    const cls = safeCell(row, 1);
+    const member = safeCell(row, 3);
+    const status = String(safeCell(row, 4) || "").trim();
+    const message = safeCell(row, 5);
+
+    const statusEl = document.getElementById("status");
+    const memberEl = document.getElementById("member");
+    const classEl = document.getElementById("class");
+    const messageEl = document.getElementById("message");
+    const timeEl = document.getElementById("time");
+
+    let statusLabel = "待機中";
+    let statusClass = "status wait";
+
+    if(status === "OK"){
+      statusLabel = "受付OK";
+      statusClass = "status ok";
+    }else if(status === "重複"){
+      statusLabel = "重複";
+      statusClass = "status ng";
+    }else if(status === "NG"){
+      statusLabel = "読取NG";
+      statusClass = "status ng";
+    }
+
+    statusEl.textContent = statusLabel;
+    statusEl.className = statusClass;
+
+    memberEl.textContent = member || "---";
+    classEl.textContent = cls || "---";
+    messageEl.textContent = message || "";
+    timeEl.textContent = time || "---";
+  }catch(e){
+    console.log("monitor load error", e);
+  }
+}
+
+setInterval(load, 800);
+load();
 </script>
 
 </body>
