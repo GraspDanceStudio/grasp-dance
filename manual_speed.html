@@ -251,7 +251,7 @@ input[type="text"]{
 
   await initLiffSafe();
 
-  const DAY_ORDER = ["月","火","水","木","金","土"];
+  const DAY_ORDER = ["月","火","水","木","金","土","WS"];
 
   const CLASSES_BY_DAY = {
     "月": ["UCCHY初級","UCCHY中級","SHINYA","あすぴ"],
@@ -269,18 +269,26 @@ input[type="text"]{
   const COMPLETE_RESET_MS = 1000;
   const INPUT_SETTLE_MS = 520;
 
-  function isMainSchoolClass(name){
-    const s = String(name || "");
-    if(!s) return false;
-    if(s.startsWith("WS_")) return false;
-    if(s.includes("K×G")) return false;
-    return true;
-  }
+  function isMainSchoolClass(name, day){
+  const s = String(name || "");
+  if(!s) return false;
+
+  // WSの日以外だけWS_を除外
+  if(day !== "WS" && s.startsWith("WS_")) return false;
+
+  // K×Gは常に除外
+  if(s.includes("K×G")) return false;
+
+  return true;
+}
 
   const FILTERED_BY_DAY = {};
   DAY_ORDER.forEach(day => {
-    FILTERED_BY_DAY[day] = (CLASSES_BY_DAY[day] || []).filter(isMainSchoolClass);
-  });
+  FILTERED_BY_DAY[day] =
+    (CLASSES_BY_DAY[day] || []).filter(name =>
+      isMainSchoolClass(name, day)
+    );
+});
 
   const metaRow = document.getElementById("metaRow");
   const currentClassBox = document.getElementById("currentClassBox");
