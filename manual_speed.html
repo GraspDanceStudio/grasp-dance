@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <title>受付（曜日切替・自動送信）</title>
 
-<script src="./shared.js?v=20260421-2"></script>
+<script src="./shared.js?v=20260424-1"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
@@ -45,6 +45,10 @@ input[type="text"]{
   padding: 14px 16px;
   width: 100%;
   box-sizing: border-box;
+}
+
+input[type="text"]:disabled{
+  background:#f2f2f2;
 }
 
 .status-box {
@@ -237,17 +241,13 @@ input[type="text"]{
 
   async function sendMonitor(data){
     try{
-      console.log("sendMonitor start", data);
-
-      const res = await fetch(
+      fetch(
         "https://script.google.com/macros/s/AKfycbyDXdx9X52sngmExXxSpn7BbcWRRTLfUvZMsjXsvQa8psm9nD2XBHuAAVv5ovrwVhoy/exec",
         {
           method: "POST",
           body: JSON.stringify(data)
         }
-      );
-
-      console.log("sendMonitor done", res);
+      ).catch(e => console.log("monitor error", e));
     }catch(e){
       console.log("monitor error", e);
     }
@@ -270,16 +270,14 @@ input[type="text"]{
   const MIN_VALID_LENGTH = 3;
   const MIN_NUMERIC_MEMBER_LENGTH = 7;
   const DUPLICATE_RESET_MS = 900;
-  const COMPLETE_RESET_MS = 1000;
+  const COMPLETE_RESET_MS = 500;
   const INPUT_SETTLE_MS = 1000;
 
   function isMainSchoolClass(name, day){
     const s = String(name || "");
     if(!s) return false;
-
     if(day !== "WS" && s.startsWith("WS_")) return false;
     if(s.includes("K×G")) return false;
-
     return true;
   }
 
@@ -346,15 +344,24 @@ input[type="text"]{
     }, 30);
   }
 
+  function lockInput(){
+    memberInput.disabled = true;
+  }
+
+  function unlockInput(){
+    memberInput.disabled = false;
+    focusInput(false);
+  }
+
   function keepInputFocus(){
     window.addEventListener("click", () => {
-      if(document.activeElement !== memberInput){
+      if(!submitting && document.activeElement !== memberInput){
         focusInput(false);
       }
     });
 
     document.addEventListener("visibilitychange", () => {
-      if(!document.hidden){
+      if(!document.hidden && !submitting){
         focusInput(false);
       }
     });
@@ -414,7 +421,7 @@ input[type="text"]{
     lastRawForTimer = "";
     lastHandledRaw = "";
     lastProcessedMember = "";
-    focusInput(false);
+    unlockInput();
   }
 
   function toHalfWidthAscii(str){
@@ -489,7 +496,6 @@ input[type="text"]{
     const m = String(member || "").trim();
 
     if(!m) return true;
-
     if(/^\d+$/.test(m)){
       return m.length < MIN_NUMERIC_MEMBER_LENGTH;
     }
@@ -595,6 +601,8 @@ input[type="text"]{
       btn.textContent = (day === "WS") ? "WS" : (day + "曜");
 
       btn.onclick = () => {
+        if(submitting) return;
+
         selectedDay = day;
         const list = FILTERED_BY_DAY[selectedDay] || [];
         selectedClass = list[0] || "";
@@ -622,6 +630,8 @@ input[type="text"]{
       btn.textContent = displayClassName(className);
 
       btn.onclick = () => {
+        if(submitting) return;
+
         selectedClass = className;
         renderClassButtons();
         updateCurrentClassBox();
@@ -685,7 +695,7 @@ input[type="text"]{
     }
 
     if(!member){
-      await sendMonitor({
+      sendMonitor({
         class: selectedClass,
         raw: rawValue,
         member: "",
@@ -722,15 +732,17 @@ input[type="text"]{
 
     lastProcessedMember = member;
     window.currentMember = member;
+    submitting = true;
+    lockInput();
+    memberInput.value = "";
 
     try{
-      submitting = true;
       setStatus("受付済み確認中…");
 
-      const duplicate = await checkDuplicate(member, selectedClass, true);
+      const duplicate = await checkDuplicate(member, selectedClass, false);
 
       if(duplicate){
-        await sendMonitor({
+        sendMonitor({
           class: selectedClass,
           raw: rawValue,
           member: member,
@@ -784,11 +796,14 @@ input[type="text"]{
       submitting = false;
       setStatus("受付エラー");
       alert("受付エラー");
+      unlockInput();
       focusInput(false);
     }
   }
 
   memberInput.addEventListener("input", () => {
+    if(submitting) return;
+
     let v = memberInput.value;
     v = cleanupScanNoise(v);
     memberInput.value = v;
@@ -817,6 +832,8 @@ input[type="text"]{
     }
 
     inputTimer = setTimeout(async () => {
+      if(submitting) return;
+
       const currentRaw = cleanupScanNoise(memberInput.value);
 
       if(currentRaw !== lastRawForTimer){
@@ -849,11 +866,15 @@ input[type="text"]{
     if(e.key === "Enter"){
       e.preventDefault();
 
+      if(submitting) return;
+
       if(inputTimer){
         clearTimeout(inputTimer);
       }
 
       inputTimer = setTimeout(async () => {
+        if(submitting) return;
+
         const currentRaw = cleanupScanNoise(memberInput.value);
 
         if(currentRaw !== lastRawForTimer && lastRawForTimer !== ""){
@@ -900,7 +921,7 @@ input[type="text"]{
   updateCurrentClassBox();
   updateScanDebug("", "");
   setStatus("読み取り待機中");
-  focusInput(false);
+  unlockInput();
   keepInputFocus();
 
 })();
