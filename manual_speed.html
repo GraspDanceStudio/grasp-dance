@@ -254,20 +254,20 @@ input[type="text"]{
   const DAY_ORDER = ["月","火","水","木","金","土"];
 
   const CLASSES_BY_DAY = {
-    "月": ["UCCHY初級","UCCHY中級","SHINYA","あすぴ","K×G中村キッズ","K×G中村オープン","K×G長久手"],
-    "火": ["SHO-TA","KIBE初級","KIBE中級","MIZUKI","K×G茶屋ヶ坂"],
-    "水": ["AIRI初級","AIRI中級","ruchica","K×G高針キッズ","K×G高針オープン"],
-    "木": ["SERINAキッズ","SERINA初中級","Shogo","RIN","心","K×G瀬戸"],
+    "月": ["UCCHY初級","UCCHY中級","SHINYA","あすぴ"],
+    "火": ["SHO-TA","KIBE初級","KIBE中級","MIZUKI"],
+    "水": ["AIRI初級","AIRI中級","ruchica"],
+    "木": ["SERINAキッズ","SERINA初中級","Shogo","RIN","心"],
     "金": ["manaキッズ","mana初級","KANAMI","RYUYA","SAMURAI"],
     "土": ["幼児","nikoキッズ","SAORI","TAKUEI","愛梨","MAHIRO初級","MAHIRO中級"],
     "WS": ["WS_4/11Cocona練習会","WS_4/18Konoka練習会","WS_4/25Rena練習会"]
   };
 
   const MIN_VALID_LENGTH = 3;
-  const MIN_NUMERIC_MEMBER_LENGTH = 6;
+  const MIN_NUMERIC_MEMBER_LENGTH = 7;
   const DUPLICATE_RESET_MS = 900;
   const COMPLETE_RESET_MS = 1000;
-  const INPUT_SETTLE_MS = 420;
+  const INPUT_SETTLE_MS = 520;
 
   function isMainSchoolClass(name){
     const s = String(name || "");
@@ -425,6 +425,7 @@ input[type="text"]{
       "－": "-",
       "―": "-",
       "ー": "-",
+      "‐": "-",
       "／": "/",
       "＼": "\\",
       "（": "(",
@@ -438,20 +439,45 @@ input[type="text"]{
       "’": "'",
       "＋": "+",
       "％": "%",
-      "＃": "#"
+      "＃": "#",
+      "｜": "|",
+      "〜": "~",
+      "ぃ": "l",
+      "ね": "n",
+      "め": "m",
+      "お": "0"
     };
 
-    s = s.replace(/[。、・：；？！＆＝＿－―ー／＼（）［］｛｝　”’＋％＃]/g, ch => map[ch] || ch);
+    s = s.replace(/[。、・：；？！＆＝＿－―ー‐／＼（）［］｛｝　”’＋％＃｜〜ぃねめお]/g, ch => map[ch] || ch);
+    s = s.replace(/[\r\n\t]/g, "");
+    s = s.replace(/\u00A0/g, " ");
 
     return s.trim();
   }
 
   function cleanupScanNoise(value){
     let s = String(value || "");
+
     s = normalizeRawInputForUrl(s);
     s = s.replace(/\s+/g, "");
     s = s.replace(/[<>]/g, "");
+    s = s.replace(/^HTTPS?/i, match => match.toLowerCase());
+    s = s.replace(/^HTTPSLIFFLINEME/i, "httpslifflineme");
+    s = s.replace(/LIFFLINEME/ig, "lifflineme");
+
     return s;
+  }
+
+  function isIncompleteMember(member){
+    const m = String(member || "").trim();
+
+    if(!m) return true;
+
+    if(/^\d+$/.test(m)){
+      return m.length < MIN_NUMERIC_MEMBER_LENGTH;
+    }
+
+    return m.length < MIN_VALID_LENGTH;
   }
 
   function extractMemberFromRaw(rawValue){
@@ -461,7 +487,7 @@ input[type="text"]{
     try{
       if(typeof normalizeMember === "function"){
         const libResult = normalizeMember(raw);
-        if(libResult){
+        if(libResult && !isIncompleteMember(libResult)){
           return String(libResult).trim();
         }
       }
@@ -474,7 +500,12 @@ input[type="text"]{
 
     const candidates = [raw, decoded];
 
-    for(const source of candidates){
+    for(const source0 of candidates){
+      let source = String(source0 || "");
+      if(!source) continue;
+
+      const lower = source.toLowerCase();
+
       const m1 = source.match(/[?&]member=([A-Za-z0-9\-_]+)/i);
       if(m1 && m1[1]){
         return String(m1[1]).trim().toUpperCase();
@@ -485,13 +516,37 @@ input[type="text"]{
         return String(m2[1]).trim().toUpperCase();
       }
 
-      const m3 = source.match(/(\d{7,8})(?!.*\d)/);
+      const m3 = source.match(/member[^A-Za-z0-9]{0,5}([A-Za-z0-9\-_]{3,})/i);
       if(m3 && m3[1]){
-        return m3[1];
+        return String(m3[1]).trim().toUpperCase();
       }
 
-      const m4 = source.match(/^[A-Za-z0-9\-_]+$/);
-      if(m4){
+      const m4 = source.match(/member([A-Za-z0-9\-_]{3,})/i);
+      if(m4 && m4[1]){
+        return String(m4[1]).trim().toUpperCase();
+      }
+
+      const idx = lower.indexOf("member");
+      if(idx >= 0){
+        const tail = source.slice(idx);
+        const m5 = tail.match(/(\d{7,8})(?!.*\d)/);
+        if(m5 && m5[1]){
+          return m5[1];
+        }
+      }
+
+      const m6 = source.match(/(\d{7,8})(?!.*\d)/);
+      if(m6 && m6[1]){
+        return m6[1];
+      }
+
+      const onlyNum = source.replace(/\D/g, "");
+      if(/^\d{7,8}$/.test(onlyNum)){
+        return onlyNum;
+      }
+
+      const m7 = source.match(/^[A-Za-z0-9\-_]+$/);
+      if(m7){
         const token = source.toUpperCase();
         if(token.length >= MIN_VALID_LENGTH){
           return token;
@@ -511,18 +566,6 @@ input[type="text"]{
     if(/^\d{1,2}$/.test(raw) && !m) return true;
 
     return false;
-  }
-
-  function isIncompleteMember(member){
-    const m = String(member || "").trim();
-
-    if(!m) return true;
-
-    if(/^\d+$/.test(m)){
-      return m.length < MIN_NUMERIC_MEMBER_LENGTH;
-    }
-
-    return m.length < MIN_VALID_LENGTH;
   }
 
   function renderDayButtons(){
@@ -768,6 +811,12 @@ input[type="text"]{
       }
 
       const currentMember = extractMemberFromRaw(currentRaw);
+      updateScanDebug(currentRaw, currentMember);
+
+      if(!currentMember){
+        setStatus("読み取り中…");
+        return;
+      }
 
       if(isIncompleteMember(currentMember)){
         setStatus("読み取り不完全");
