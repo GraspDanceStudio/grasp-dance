@@ -270,8 +270,8 @@ input[type="text"]{
   const MIN_VALID_LENGTH = 3;
   const MIN_NUMERIC_MEMBER_LENGTH = 7;
   const DUPLICATE_RESET_MS = 900;
-  const COMPLETE_RESET_MS = 500;
-  const INPUT_SETTLE_MS = 800;
+  const COMPLETE_RESET_MS = 1000;
+  const INPUT_SETTLE_MS = 1000;
 
   function isMainSchoolClass(name, day){
     const s = String(name || "");
@@ -497,35 +497,6 @@ input[type="text"]{
     return m.length < MIN_VALID_LENGTH;
   }
 
-  function isKnownBrokenPrefix(raw){
-    const s = String(raw || "").toLowerCase();
-
-    // member= が見えているなら正常候補
-    if(s.includes("member=")) return false;
-
-    return (
-      s === "http" ||
-      s === "https" ||
-      s === "httpsl" ||
-      s === "httpsli" ||
-      s === "httpslif" ||
-      s === "httpsliff" ||
-      s === "httpsliffl" ||
-      s === "httpsliffli" ||
-      s === "httpslifflin" ||
-      s === "httpsliffline" ||
-      s === "httpslifflineme" ||
-      s === "http://" ||
-      s === "https://" ||
-      s === "liff" ||
-      s === "liffl" ||
-      s === "liffli" ||
-      s === "lifflin" ||
-      s === "liffline" ||
-      s === "lifflineme"
-    );
-  }
-
   function extractMemberFromRaw(rawValue){
     let raw = cleanupScanNoise(rawValue);
     if(!raw) return "";
@@ -708,11 +679,6 @@ input[type="text"]{
 
     updateScanDebug(raw, member);
 
-    if(isKnownBrokenPrefix(raw)){
-      setStatus("読み取り不完全");
-      return;
-    }
-
     if(isObviouslyInvalidScan(raw, member)){
       setStatus("読み取り待機中");
       return;
@@ -794,7 +760,7 @@ input[type="text"]{
 
       await submitFixedClass(member, selectedClass);
 
-      await sendMonitor({
+      sendMonitor({
         class: selectedClass,
         raw: rawValue,
         member: member,
@@ -864,11 +830,6 @@ input[type="text"]{
       const currentMember = extractMemberFromRaw(currentRaw);
       updateScanDebug(currentRaw, currentMember);
 
-      if(isKnownBrokenPrefix(currentRaw)){
-        setStatus("読み取り不完全");
-        return;
-      }
-
       if(!currentMember){
         setStatus("読み取り中…");
         return;
@@ -884,30 +845,41 @@ input[type="text"]{
     }, INPUT_SETTLE_MS);
   });
 
-  memberInput.addEventListener("keydown", async (e) => {
+  memberInput.addEventListener("keydown", (e) => {
     if(e.key === "Enter"){
       e.preventDefault();
+
       if(inputTimer){
         clearTimeout(inputTimer);
-        inputTimer = null;
       }
 
-      const raw = cleanupScanNoise(memberInput.value);
-      const member = extractMemberFromRaw(raw);
-      updateScanDebug(raw, member);
+      inputTimer = setTimeout(async () => {
+        const currentRaw = cleanupScanNoise(memberInput.value);
 
-      if(isKnownBrokenPrefix(raw)){
-        setStatus("読み取り不完全");
-        return;
-      }
+        if(currentRaw !== lastRawForTimer && lastRawForTimer !== ""){
+          return;
+        }
 
-      if(isIncompleteMember(member)){
-        setStatus("読み取り不完全");
-        return;
-      }
+        if(currentRaw === lastHandledRaw){
+          return;
+        }
 
-      lastHandledRaw = raw;
-      await processReception(raw);
+        const currentMember = extractMemberFromRaw(currentRaw);
+        updateScanDebug(currentRaw, currentMember);
+
+        if(!currentMember){
+          setStatus("読み取り中…");
+          return;
+        }
+
+        if(isIncompleteMember(currentMember)){
+          setStatus("読み取り不完全");
+          return;
+        }
+
+        lastHandledRaw = currentRaw;
+        await processReception(currentRaw);
+      }, INPUT_SETTLE_MS);
     }
   });
 
