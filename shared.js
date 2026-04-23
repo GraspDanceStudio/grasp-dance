@@ -167,7 +167,7 @@
     return s;
   }
 
-  // ===== 会員番号整形（英数字 + - _ 対応 / 崩れたURL救済対応） =====
+  // ===== 会員番号整形 =====
   window.normalizeMember = function(value){
     let s = cleanupScanNoise(value);
 
@@ -221,23 +221,13 @@
   };
 
   // ===== 会員番号比較 =====
-  function isNumericMemberId(value){
-    return /^[0-9]+$/.test(String(value || ""));
-  }
-
   function isSameMemberId(a, b){
     const aa = window.normalizeMember(a);
     const bb = window.normalizeMember(b);
 
     if(!aa || !bb) return false;
 
-    const aIsNum = isNumericMemberId(aa);
-    const bIsNum = isNumericMemberId(bb);
-
-    if(aIsNum && bIsNum){
-      return Number(aa) === Number(bb);
-    }
-
+    // 先頭0を正式な番号として扱うので、完全一致優先
     return aa === bb;
   }
 
@@ -496,86 +486,99 @@
     removeLocalPendingClasses(member, classNames);
   }
 
-  // ===== manual_speed.html からも使えるよう公開 =====
   window.addLocalPendingClasses = addLocalPendingClasses;
   window.removeLocalPendingClasses = removeLocalPendingClasses;
   window.addLocalConfirmedClasses = addLocalConfirmedClasses;
   window.promotePendingToConfirmed = promotePendingToConfirmed;
 
-  // ===== 曜日ボタン =====
-  window.renderDayButtons = function({ dayButtonsEl, selectedDay, onSelect }){
-    dayButtonsEl.innerHTML = "";
-
-    window.DAY_MAP.forEach((day) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = day === "WS" ? "WS" : `${day}曜`;
-      btn.className = "day-btn" + (day === selectedDay ? " today" : "");
-      btn.onclick = () => onSelect(day);
-      dayButtonsEl.appendChild(btn);
-    });
+  // ===== LIFF初期化 =====
+  window.initLiffSafe = async function(){
+    try{
+      if(typeof liff !== "undefined"){
+        await liff.init({ liffId: window.APP_CONFIG.LIFF_ID });
+      }
+    }catch(e){
+      console.log("LIFF init error:", e);
+    }
   };
 
-  // ===== 確認UI =====
-  window.showSelectionConfirm = function({ member, selectedClasses }){
-    return new Promise((resolve) => {
+  // ===== 受講数取得 =====
+  window.fetchCount = async function(member){
+    const cleanMember = window.normalizeMember(member);
+    const ym = getTokyoYearMonth();
 
-      const old = document.getElementById("selectionConfirmOverlay");
-      if(old) old.remove();
+    const url =
+      "https://docs.google.com/spreadsheets/d/" +
+      window.APP_CONFIG.SPREADSHEET_ID +
+      "/gviz/tq?tqx=out:json&gid=" +
+      window.APP_CONFIG.COUNT_GID +
+      "&tq=" +
+      encodeURIComponent(
+        "select C,D where A='" + escapeForGvizString(cleanMember) + "' and B='" + escapeForGvizString(ym) + "'"
+      );
 
-      const overlay = document.createElement("div");
-      overlay.id = "selectionConfirmOverlay";
-      overlay.style.position = "fixed";
-      overlay.style.inset = "0";
-      overlay.style.background = "rgba(0,0,0,0.65)";
-      overlay.style.display = "flex";
-      overlay.style.alignItems = "center";
-      overlay.style.justifyContent = "center";
-      overlay.style.zIndex = "9999";
+    try{
+      const res = await fetch(url, { cache: "no-store" });
+      const text = await res.text();
 
-      const box = document.createElement("div");
-      box.style.background = "#fff";
-      box.style.padding = "36px 22px";
-      box.style.borderRadius = "18px";
-      box.style.textAlign = "center";
-      box.style.width = "92%";
-      box.style.maxWidth = "560px";
-      box.style.boxSizing = "border-box";
-      box.style.lineHeight = "1.6";
+      const json = JSON.parse(
+        text.substring(
+          text.indexOf("{"),
+          text.lastIndexOf("}") + 1
+        )
+      );
 
-      let html =
-        "<div style='font-size:44px;font-weight:800;margin-bottom:18px;'>受付確認</div>" +
-        "会員番号：<b style='font-size:38px;'>" + window.escapeHtml(member) + "</b><br><br>" +
-        "<div style='font-size:36px;font-weight:800;text-align:left;display:inline-block;line-height:1.6;'>" +
-        selectedClasses.map(c => "▶ " + window.escapeHtml(c)).join("<br>") +
-        "</div>";
+      const rows = json.table?.rows || [];
 
-      html +=
-        "<div style='display:flex;gap:14px;margin-top:26px;'>" +
-        "<button id='selectionConfirmCancel' style='flex:1;font-size:30px;padding:20px;border:none;border-radius:12px;background:#ddd;color:#000;font-weight:700;'>戻る</button>" +
-        "<button id='selectionConfirmOk' style='flex:1;font-size:30px;padding:20px;border:none;border-radius:12px;background:#66adff;color:#fff;font-weight:700;'>受付する</button>" +
-        "</div>";
+      if(rows.length > 0){
+        const count = Number(rows[0].c?.[0]?.v || 0);
 
-      box.innerHTML = html;
-      overlay.appendChild(box);
-      document.body.appendChild(overlay);
+        let last = "";
+        if(rows[0].c?.[1]?.f){
+          const f = rows[0].c[1].f;
+          const parts = f.split(" ")[0].split("/");
+          if(parts.length >= 3){
+            last = Number(parts[1]) + "/" + Number(parts[2]);
+          }else{
+            last = f;
+          }
+        }else if(rows[0].c?.[1]?.v){
+          const raw = rows[0].c[1].v;
 
-      document.getElementById("selectionConfirmCancel").onclick = () => {
-        overlay.remove();
-        resolve(false);
-      };
+          if(raw instanceof Date){
+            last =
+              Number(raw.getMonth() + 1) + "/" +
+              Number(raw.getDate());
+          }else{
+            const s = String(raw).trim();
+            const m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+            if(m){
+              last = Number(m[2]) + "/" + Number(m[3]);
+            }else{
+              last = s;
+            }
+          }
+        }
 
-      document.getElementById("selectionConfirmOk").onclick = () => {
-        overlay.remove();
-        resolve(true);
-      };
-    });
+        return {
+          member: cleanMember,
+          count: count,
+          last: last
+        };
+      }
+
+    }catch(e){
+      console.log("fetchCount error:", e);
+    }
+
+    return {
+      member: cleanMember,
+      count: 0,
+      last: ""
+    };
   };
 
-  // =========================================================
-  // 重複チェック
-  // =========================================================
-
+  // ===== 重複チェック =====
   function getDuplicateCacheKey(member, date){
     return `${date}__${member}`;
   }
@@ -704,427 +707,7 @@
     duplicateCacheMap = {};
   };
 
-  // ===== クラス描画 =====
-  window.renderClasses = function({ day, titleEl, containerEl, onSubmit }){
-
-    titleEl.textContent =
-      day === "WS"
-        ? "本日のクラス（WS）"
-        : `本日のクラス（${day}曜日）`;
-
-    containerEl.innerHTML = "";
-
-    const list = window.CLASSES_BY_DAY[day] || [];
-    const selectedClasses = [];
-    const classButtonMap = new Map();
-    let duplicateClassSet = new Set();
-    let isSubmitting = false;
-
-    const infoBox = document.createElement("div");
-    infoBox.style.fontSize = "22px";
-    infoBox.style.margin = "0 0 12px";
-    infoBox.style.lineHeight = "1.6";
-
-    const selectedBox = document.createElement("div");
-    selectedBox.style.fontSize = "24px";
-    selectedBox.style.margin = "12px 0 20px";
-    selectedBox.style.lineHeight = "1.6";
-
-    const confirmBtn = document.createElement("button");
-    confirmBtn.type = "button";
-    confirmBtn.textContent = "選択したクラスを確認";
-    confirmBtn.className = "remain-btn";
-    confirmBtn.style.display = "none";
-    confirmBtn.style.fontSize = "34px";
-    confirmBtn.style.padding = "34px 24px";
-    confirmBtn.style.marginTop = "20px";
-    confirmBtn.style.fontWeight = "800";
-    confirmBtn.style.borderRadius = "16px";
-
-    function refreshSelectedView(){
-      if(selectedClasses.length === 0){
-        selectedBox.innerHTML = "";
-        confirmBtn.style.display = "none";
-        return;
-      }
-
-      selectedBox.innerHTML =
-        "<b>選択中：</b><br>" +
-        selectedClasses.map(c => "・" + window.escapeHtml(c)).join("<br>");
-
-      confirmBtn.style.display = "block";
-    }
-
-    function applyDuplicateStyles(btn, isDuplicate){
-      if(isDuplicate){
-        btn.disabled = true;
-        btn.style.opacity = "1";
-        btn.style.background = "#d9d9d9";
-        btn.style.color = "#666";
-        btn.style.fontWeight = "700";
-        btn.style.border = "none";
-        btn.textContent = btn.dataset.baseLabel + "（受付済み）";
-        btn.style.cursor = "not-allowed";
-      }else{
-        btn.disabled = false;
-        btn.style.cursor = "pointer";
-        btn.textContent = btn.dataset.baseLabel;
-        btn.style.background = "";
-        btn.style.color = "";
-        btn.style.fontWeight = "";
-        btn.style.border = "";
-      }
-    }
-
-    function setSubmittingState(flag){
-      isSubmitting = flag;
-
-      classButtonMap.forEach((btn) => {
-        const baseLabel = btn.dataset.className || "";
-        const isDuplicate = duplicateClassSet.has(normalizeClassName(baseLabel));
-
-        if(flag){
-          btn.disabled = true;
-          btn.style.cursor = "wait";
-        }else{
-          applyDuplicateStyles(btn, isDuplicate);
-
-          if(!isDuplicate && selectedClasses.includes(baseLabel)){
-            btn.style.background = "#66ADFF";
-            btn.style.color = "#FFF";
-            btn.style.fontWeight = "bold";
-          }
-        }
-      });
-
-      if(flag){
-        confirmBtn.disabled = true;
-        confirmBtn.textContent = "受付中…";
-      }else{
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = "選択したクラスを確認";
-      }
-    }
-
-    function toggleClass(btn, cls){
-      if(btn.disabled || isSubmitting) return;
-
-      const idx = selectedClasses.indexOf(cls);
-
-      if(idx >= 0){
-        selectedClasses.splice(idx, 1);
-        btn.style.opacity = "1";
-        btn.style.background = "";
-        btn.style.color = "";
-        btn.style.fontWeight = "";
-      }else{
-        selectedClasses.push(cls);
-        btn.style.opacity = "1";
-        btn.style.background = "#66ADFF";
-        btn.style.color = "#FFF";
-        btn.style.fontWeight = "bold";
-      }
-
-      refreshSelectedView();
-    }
-
-    function removeDuplicateSelections(){
-      for(let i = selectedClasses.length - 1; i >= 0; i--){
-        if(duplicateClassSet.has(normalizeClassName(selectedClasses[i]))){
-          selectedClasses.splice(i, 1);
-        }
-      }
-    }
-
-    function clearSelectionsAndBlueState(){
-      selectedClasses.splice(0, selectedClasses.length);
-
-      classButtonMap.forEach((btn, cls) => {
-        const isDuplicate = duplicateClassSet.has(normalizeClassName(cls));
-        if(!isDuplicate){
-          btn.style.opacity = "1";
-          btn.style.background = "";
-          btn.style.color = "";
-          btn.style.fontWeight = "";
-        }
-      });
-
-      refreshSelectedView();
-    }
-
-    async function paintDuplicateButtons(forceRefresh = false){
-      const member = window.normalizeMember(window.currentMember);
-
-      if(!member){
-        infoBox.innerHTML = "";
-        duplicateClassSet = new Set();
-        return;
-      }
-
-      infoBox.innerHTML = "受付済みクラス確認中…";
-
-      duplicateClassSet = await window.getTodayDuplicateClassSet(member, forceRefresh);
-
-      classButtonMap.forEach((btn, cls) => {
-        const isDuplicate = duplicateClassSet.has(normalizeClassName(cls));
-        applyDuplicateStyles(btn, isDuplicate);
-
-        if(!isDuplicate && selectedClasses.includes(cls)){
-          btn.style.background = "#66ADFF";
-          btn.style.color = "#FFF";
-          btn.style.fontWeight = "bold";
-        }
-      });
-
-      removeDuplicateSelections();
-      refreshSelectedView();
-
-      const dayDuplicateCount = list.filter(cls =>
-        duplicateClassSet.has(normalizeClassName(cls))
-      ).length;
-
-      if(dayDuplicateCount > 0){
-        infoBox.innerHTML =
-          "<span style='color:#666;font-weight:700;'>グレー表示のクラスは本日受付済みです</span>";
-      }else{
-        infoBox.innerHTML = "";
-      }
-    }
-
-    containerEl.appendChild(infoBox);
-
-    list.forEach((cls) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.dataset.baseLabel = `受付 ▶ ${cls}`;
-      btn.dataset.className = cls;
-      btn.textContent = btn.dataset.baseLabel;
-      btn.className = "class-btn";
-
-      btn.onclick = () => {
-        toggleClass(btn, cls);
-      };
-
-      classButtonMap.set(cls, btn);
-      containerEl.appendChild(btn);
-    });
-
-    containerEl.appendChild(selectedBox);
-    containerEl.appendChild(confirmBtn);
-
-    confirmBtn.onclick = async () => {
-      const member = window.normalizeMember(window.currentMember);
-
-      if(isSubmitting) return;
-
-      if(!member){
-        alert("会員番号が取得できていません");
-        return;
-      }
-
-      if(selectedClasses.length === 0){
-        alert("クラスを選択してください");
-        return;
-      }
-
-      const submitClasses = selectedClasses.slice();
-
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = "確認中…";
-
-      window.clearDuplicateCache(member);
-      let duplicateClasses = await window.getTodayDuplicateClasses(member, submitClasses, true);
-
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = "選択したクラスを確認";
-
-      if(duplicateClasses.length > 0){
-        await paintDuplicateButtons(true);
-        alert(
-          "すでに受付済みのクラスが含まれています。\n\n" +
-          duplicateClasses.map(c => "・" + c).join("\n")
-        );
-        return;
-      }
-
-      const ok = await window.showSelectionConfirm({
-        member,
-        selectedClasses: submitClasses
-      });
-
-      if(!ok) return;
-
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = "最終確認中…";
-
-      window.clearDuplicateCache(member);
-      duplicateClasses = await window.getTodayDuplicateClasses(member, submitClasses, true);
-
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = "選択したクラスを確認";
-
-      if(duplicateClasses.length > 0){
-        await paintDuplicateButtons(true);
-        alert(
-          "確認中に受付済みになったクラスがあります。\n\n" +
-          duplicateClasses.map(c => "・" + c).join("\n")
-        );
-        return;
-      }
-
-      addLocalPendingClasses(member, submitClasses);
-      await paintDuplicateButtons(false);
-      clearSelectionsAndBlueState();
-      setSubmittingState(true);
-
-      try{
-        await Promise.resolve(onSubmit(submitClasses));
-
-        promotePendingToConfirmed(member, submitClasses);
-
-        window.clearDuplicateCache(member);
-        await paintDuplicateButtons(true);
-
-      }catch(e){
-        console.log("onSubmit error", e);
-
-        removeLocalPendingClasses(member, submitClasses);
-        window.clearDuplicateCache(member);
-        await paintDuplicateButtons(true);
-
-        alert("受付送信時にエラーが発生しました。通信状況をご確認ください。");
-      }finally{
-        setSubmittingState(false);
-      }
-    };
-
-    paintDuplicateButtons(false);
-  };
-
-  // ===== LIFF初期化 =====
-  window.initLiffSafe = async function(){
-    try{
-      if(typeof liff !== "undefined"){
-        await liff.init({ liffId: window.APP_CONFIG.LIFF_ID });
-      }
-    }catch(e){
-      console.log("LIFF init error:", e);
-    }
-  };
-
-  // ===== 照会中表示 =====
-  window.showLoading = function(){
-    const complete = document.getElementById("complete");
-    const completeDetail = document.getElementById("completeDetail");
-
-    if(!complete || !completeDetail) return;
-
-    completeDetail.innerHTML =
-      "<span class='complete-title'>受講数照会</span><br><br>" +
-      "照会中…";
-
-    complete.style.display = "flex";
-  };
-
-  // ===== 受講数表示 =====
-  window.showCount = function(data){
-    const complete = document.getElementById("complete");
-    const completeDetail = document.getElementById("completeDetail");
-
-    if(!complete || !completeDetail) return;
-
-    completeDetail.innerHTML =
-      "<span class='complete-title'>受講数照会</span><br><br>" +
-      "会員番号：<b>" + window.escapeHtml(data.member) + "</b><br>" +
-      "今月受講：<b>" + window.escapeHtml(data.count) + " 回</b><br>" +
-      "最終受講：<b>" + window.escapeHtml(data.last) + "</b>";
-
-    complete.style.display = "flex";
-
-    setTimeout(() => {
-      complete.style.display = "none";
-    }, 3000);
-  };
-
-  // ===== 受講数取得 =====
-  window.fetchCount = async function(member){
-
-    const cleanMember = window.normalizeMember(member);
-    const ym = getTokyoYearMonth();
-
-    const url =
-      "https://docs.google.com/spreadsheets/d/" +
-      window.APP_CONFIG.SPREADSHEET_ID +
-      "/gviz/tq?tqx=out:json&gid=" +
-      window.APP_CONFIG.COUNT_GID +
-      "&tq=" +
-      encodeURIComponent(
-        "select C,D where A='" + escapeForGvizString(cleanMember) + "' and B='" + escapeForGvizString(ym) + "'"
-      );
-
-    try{
-      const res = await fetch(url, { cache: "no-store" });
-      const text = await res.text();
-
-      const json = JSON.parse(
-        text.substring(
-          text.indexOf("{"),
-          text.lastIndexOf("}") + 1
-        )
-      );
-
-      const rows = json.table?.rows || [];
-
-      if(rows.length > 0){
-        const count = Number(rows[0].c?.[0]?.v || 0);
-
-        let last = "";
-        if(rows[0].c?.[1]?.f){
-          const f = rows[0].c[1].f;
-          const parts = f.split(" ")[0].split("/");
-          if(parts.length >= 3){
-            last = Number(parts[1]) + "/" + Number(parts[2]);
-          }else{
-            last = f;
-          }
-        }else if(rows[0].c?.[1]?.v){
-          const raw = rows[0].c[1].v;
-
-          if(raw instanceof Date){
-            last =
-              Number(raw.getMonth() + 1) + "/" +
-              Number(raw.getDate());
-          }else{
-            const s = String(raw).trim();
-            const m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
-            if(m){
-              last = Number(m[2]) + "/" + Number(m[3]);
-            }else{
-              last = s;
-            }
-          }
-        }
-
-        return {
-          member: cleanMember,
-          count: count,
-          last: last
-        };
-      }
-
-    }catch(e){
-      console.log("fetchCount error:", e);
-    }
-
-    return {
-      member: cleanMember,
-      count: 0,
-      last: ""
-    };
-  };
-
-  // ===== 単体重複チェック =====
-  window.checkDuplicate = async function(member, className, forceRefresh = true){
+  window.checkDuplicate = async function(member, className, forceRefresh = false){
     const duplicates = await window.getTodayDuplicateClasses(member, [className], forceRefresh);
     return duplicates.includes(normalizeClassName(className));
   };
