@@ -583,7 +583,7 @@ input[type="text"]{
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "day-btn" + (day === selectedDay ? " active" : "");
-      btn.textContent = day + "曜";
+      btn.textContent = (day === "WS") ? "WS" : (day + "曜");
 
       btn.onclick = () => {
         selectedDay = day;
