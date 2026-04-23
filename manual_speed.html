@@ -76,7 +76,7 @@ input[type="text"]{
 
 .day-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 16px;
 }
@@ -171,13 +171,17 @@ input[type="text"]{
 
 @media (max-width: 900px){
   .day-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 700px){
   .class-grid {
     grid-template-columns: 1fr;
+  }
+
+  .day-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 </style>
@@ -254,10 +258,10 @@ input[type="text"]{
   const DAY_ORDER = ["月","火","水","木","金","土","WS"];
 
   const CLASSES_BY_DAY = {
-    "月": ["UCCHY初級","UCCHY中級","SHINYA","あすぴ"],
-    "火": ["SHO-TA","KIBE初級","KIBE中級","MIZUKI"],
-    "水": ["AIRI初級","AIRI中級","ruchica"],
-    "木": ["SERINAキッズ","SERINA初中級","Shogo","RIN","心"],
+    "月": ["UCCHY初級","UCCHY中級","SHINYA","あすぴ","K×G中村キッズ","K×G中村オープン","K×G長久手"],
+    "火": ["SHO-TA","KIBE初級","KIBE中級","MIZUKI","K×G茶屋ヶ坂"],
+    "水": ["AIRI初級","AIRI中級","ruchica","K×G高針キッズ","K×G高針オープン"],
+    "木": ["SERINAキッズ","SERINA初中級","Shogo","RIN","心","K×G瀬戸"],
     "金": ["manaキッズ","mana初級","KANAMI","RYUYA","SAMURAI"],
     "土": ["幼児","nikoキッズ","SAORI","TAKUEI","愛梨","MAHIRO初級","MAHIRO中級"],
     "WS": ["WS_4/11Cocona練習会","WS_4/18Konoka練習会","WS_4/25Rena練習会"]
@@ -267,28 +271,25 @@ input[type="text"]{
   const MIN_NUMERIC_MEMBER_LENGTH = 7;
   const DUPLICATE_RESET_MS = 900;
   const COMPLETE_RESET_MS = 1000;
-  const INPUT_SETTLE_MS = 520;
+  const INPUT_SETTLE_MS = 800;
 
   function isMainSchoolClass(name, day){
-  const s = String(name || "");
-  if(!s) return false;
+    const s = String(name || "");
+    if(!s) return false;
 
-  // WSの日以外だけWS_を除外
-  if(day !== "WS" && s.startsWith("WS_")) return false;
+    if(day !== "WS" && s.startsWith("WS_")) return false;
+    if(s.includes("K×G")) return false;
 
-  // K×Gは常に除外
-  if(s.includes("K×G")) return false;
-
-  return true;
-}
+    return true;
+  }
 
   const FILTERED_BY_DAY = {};
   DAY_ORDER.forEach(day => {
-  FILTERED_BY_DAY[day] =
-    (CLASSES_BY_DAY[day] || []).filter(name =>
-      isMainSchoolClass(name, day)
-    );
-});
+    FILTERED_BY_DAY[day] =
+      (CLASSES_BY_DAY[day] || []).filter(name =>
+        isMainSchoolClass(name, day)
+      );
+  });
 
   const metaRow = document.getElementById("metaRow");
   const currentClassBox = document.getElementById("currentClassBox");
@@ -365,11 +366,19 @@ input[type="text"]{
     }, 1200);
   }
 
+  function displayClassName(className){
+    const s = String(className || "");
+    if(selectedDay === "WS"){
+      return s.replace(/^WS_/, "");
+    }
+    return s;
+  }
+
   function updateCurrentClassBox(){
     if(selectedClass){
       currentClassBox.classList.add("active");
       currentClassBox.innerHTML =
-        "現在受付中：<b>" + escapeHtml(selectedClass) + "</b>";
+        "現在受付中：<b>" + escapeHtml(displayClassName(selectedClass)) + "</b>";
     }else{
       currentClassBox.classList.remove("active");
       currentClassBox.innerHTML = "現在受付中：未選択";
@@ -486,6 +495,31 @@ input[type="text"]{
     }
 
     return m.length < MIN_VALID_LENGTH;
+  }
+
+  function isKnownBrokenPrefix(raw){
+    const s = String(raw || "").toLowerCase();
+
+    return (
+      s === "http" ||
+      s === "https" ||
+      s === "httpsl" ||
+      s === "httpsli" ||
+      s === "httpslif" ||
+      s === "httpsliff" ||
+      s === "httpsliffl" ||
+      s === "httpsliffli" ||
+      s === "httpslifflin" ||
+      s === "httpsliffline" ||
+      s.startsWith("httpsliff") ||
+      s.startsWith("http://") ||
+      s.startsWith("https://") ||
+      s === "liff" ||
+      s === "liffl" ||
+      s === "liffli" ||
+      s === "lifflin" ||
+      s === "liffline"
+    );
   }
 
   function extractMemberFromRaw(rawValue){
@@ -610,7 +644,7 @@ input[type="text"]{
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "class-select-btn" + (className === selectedClass ? " active" : "");
-      btn.textContent = className;
+      btn.textContent = displayClassName(className);
 
       btn.onclick = () => {
         selectedClass = className;
@@ -655,7 +689,7 @@ input[type="text"]{
     completeDetail.innerHTML =
       "<span class='complete-title'>✅ 受付OK</span><br><br>" +
       "会員番号：<b>" + escapeHtml(member) + "</b><br>" +
-      "クラス：<b>" + escapeHtml(className) + "</b>";
+      "クラス：<b>" + escapeHtml(displayClassName(className)) + "</b>";
 
     complete.style.display = "flex";
   }
@@ -669,6 +703,11 @@ input[type="text"]{
     const member = extractMemberFromRaw(raw);
 
     updateScanDebug(raw, member);
+
+    if(isKnownBrokenPrefix(raw)){
+      setStatus("読み取り不完全");
+      return;
+    }
 
     if(isObviouslyInvalidScan(raw, member)){
       setStatus("読み取り待機中");
@@ -734,7 +773,7 @@ input[type="text"]{
         alert(
           "この会員は本日すでに受付済みです。\n\n" +
           "会員番号： " + member + "\n" +
-          "クラス： " + selectedClass
+          "クラス： " + displayClassName(selectedClass)
         );
 
         resetTimer = setTimeout(() => {
@@ -821,6 +860,11 @@ input[type="text"]{
       const currentMember = extractMemberFromRaw(currentRaw);
       updateScanDebug(currentRaw, currentMember);
 
+      if(isKnownBrokenPrefix(currentRaw)){
+        setStatus("読み取り不完全");
+        return;
+      }
+
       if(!currentMember){
         setStatus("読み取り中…");
         return;
@@ -848,6 +892,11 @@ input[type="text"]{
       const member = extractMemberFromRaw(raw);
       updateScanDebug(raw, member);
 
+      if(isKnownBrokenPrefix(raw)){
+        setStatus("読み取り不完全");
+        return;
+      }
+
       if(isIncompleteMember(member)){
         setStatus("読み取り不完全");
         return;
@@ -868,7 +917,7 @@ input[type="text"]{
   selectedClass = (FILTERED_BY_DAY[selectedDay] || [])[0] || "";
 
   metaRow.innerHTML =
-    "本日の曜日：<b>" + escapeHtml(selectedDay) + "曜</b> ／ 初期選択：<b>" + escapeHtml(selectedClass || "なし") + "</b>";
+    "本日の曜日：<b>" + escapeHtml(selectedDay === "WS" ? "WS" : (selectedDay + "曜")) + "</b> ／ 初期選択：<b>" + escapeHtml(selectedClass ? displayClassName(selectedClass) : "なし") + "</b>";
 
   renderDayButtons();
   renderClassButtons();
