@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>携帯受付テスト</title>
+
+<script src="./shared.js?v=20260424-4"></script>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+<style>
+body{
+  font-family:sans-serif;
+  margin:0;
+  padding:14px;
+  background:#fff;
+}
+
+.title{
+  font-size:28px;
+  font-weight:900;
+  margin-bottom:10px;
+}
+
+.current{
+  font-size:24px;
+  font-weight:900;
+  padding:14px;
+  border-radius:12px;
+  background:#e8f2ff;
+  color:#114b9b;
+  line-height:1.4;
+  margin-bottom:12px;
+}
+
+.status{
+  font-size:24px;
+  font-weight:900;
+  padding:12px;
+  border-radius:10px;
+  background:#f4f4f4;
+  margin-bottom:12px;
+}
+
+input{
+  font-size:22px;
+  padding:14px;
+  width:100%;
+  box-sizing:border-box;
+  margin-bottom:10px;
+}
+
+.debug{
+  font-size:15px;
+  line-height:1.5;
+  background:#f7f7f7;
+  padding:10px;
+  border-radius:10px;
+  margin-bottom:14px;
+  word-break:break-all;
+}
+
+.day-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:8px;
+  margin-bottom:14px;
+}
+
+.day-btn{
+  font-size:18px;
+  font-weight:800;
+  padding:12px 6px;
+  border:none;
+  border-radius:10px;
+  background:#eee;
+}
+
+.day-btn.active{
+  background:#66adff;
+  color:#fff;
+}
+
+.class-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
+}
+
+.class-btn{
+  font-size:22px;
+  font-weight:900;
+  padding:18px;
+  border:none;
+  border-radius:12px;
+  background:#f2f2f2;
+  text-align:left;
+}
+
+.class-btn.active{
+  background:#66adff;
+  color:#fff;
+}
+
+#complete{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.68);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:999;
+}
+
+#completeBox{
+  background:#fff;
+  width:92%;
+  max-width:420px;
+  border-radius:18px;
+  padding:32px 18px;
+  text-align:center;
+}
+
+.complete-main{
+  font-size:44px;
+  font-weight:900;
+  margin-bottom:18px;
+}
+
+.complete-sub{
+  font-size:26px;
+  font-weight:800;
+  line-height:1.5;
+}
+</style>
+</head>
+
+<body>
+
+<div class="title">携帯受付テスト</div>
+
+<div id="current" class="current">現在受付中：---</div>
+<div id="status" class="status">初期設定中…</div>
+
+<input
+  id="memberInput"
+  type="text"
+  placeholder="QRを読み取る / 会員番号"
+  autocomplete="off"
+  autocapitalize="off"
+  autocorrect="off"
+  spellcheck="false"
+  inputmode="text"
+/>
+
+<div id="debug" class="debug">
+  直近読取：---<br>
+  抽出会員番号：---
+</div>
+
+<div id="dayGrid" class="day-grid"></div>
+<div id="classGrid" class="class-grid"></div>
+
+<div id="complete">
+  <div id="completeBox">
+    <div id="completeText"></div>
+  </div>
+</div>
+
+<script>
+(async () => {
+
+  await initLiffSafe();
+
+  const DAY_ORDER = ["月","火","水","木","金","土","WS"];
+
+  const CLASSES_BY_DAY = window.CLASSES_BY_DAY;
+
+  const INPUT_SETTLE_MS = 1000;
+  const COMPLETE_RESET_MS = 500;
+  const MIN_NUMERIC_MEMBER_LENGTH = 7;
+
+  const memberInput = document.getElementById("memberInput");
+  const statusEl = document.getElementById("status");
+  const debugEl = document.getElementById("debug");
+  const currentEl = document.getElementById("current");
+  const dayGrid = document.getElementById("dayGrid");
+  const classGrid = document.getElementById("classGrid");
+  const complete = document.getElementById("complete");
+  const completeText = document.getElementById("completeText");
+
+  let selectedDay = getTokyoWeekdayLabel();
+  if(selectedDay === "日") selectedDay = "月";
+
+  let selectedClass = "";
+  let inputTimer = null;
+  let submitting = false;
+  let lastHandledRaw = "";
+
+  function setStatus(text){
+    statusEl.textContent = text;
+  }
+
+  function toHalfWidthAscii(str){
+    return String(str || "").replace(/[！-～]/g, ch =>
+      String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
+    );
+  }
+
+  function normalizeRaw(value){
+    let s = String(value || "");
+    s = toHalfWidthAscii(s);
+
+    const map = {
+      "。": ".",
+      "、": ",",
+      "・": "/",
+      "：": ":",
+      "？": "?",
+      "＆": "&",
+      "＝": "=",
+      "＿": "_",
+      "－": "-",
+      "ー": "-",
+      "／": "/",
+      "　": "",
+      "ぃ": "l",
+      "ね": "n",
+      "め": "m",
+      "お": "0"
+    };
+
+    s = s.replace(/[。、・：？＆＝＿－ー／　ぃねめお]/g, ch => map[ch] || ch);
+    s = s.replace(/\s+/g, "");
+    s = s.replace(/[<>]/g, "");
+
+    return s.trim();
+  }
+
+  function extractMember(rawValue){
+    const raw = normalizeRaw(rawValue);
+    if(!raw) return "";
+
+    try{
+      const n = normalizeMember(raw);
+      if(n && !isIncompleteMember(n)) return n;
+    }catch(e){}
+
+    let decoded = raw;
+    try{
+      decoded = decodeURIComponent(raw);
+    }catch(e){}
+
+    const candidates = [raw, decoded];
+
+    for(const source of candidates){
+      const m1 = source.match(/[?&]member=([A-Za-z0-9\-_]+)/i);
+      if(m1) return m1[1].toUpperCase();
+
+      const m2 = source.match(/member=([A-Za-z0-9\-_]+)/i);
+      if(m2) return m2[1].toUpperCase();
+
+      const m3 = source.match(/member[^A-Za-z0-9]{0,5}([A-Za-z0-9\-_]{3,})/i);
+      if(m3) return m3[1].toUpperCase();
+
+      const m4 = source.match(/member([A-Za-z0-9\-_]{3,})/i);
+      if(m4) return m4[1].toUpperCase();
+
+      const m5 = source.match(/(\d{7,8})(?!.*\d)/);
+      if(m5) return m5[1];
+    }
+
+    return "";
+  }
+
+  function isIncompleteMember(member){
+    const m = String(member || "").trim();
+    if(!m) return true;
+
+    if(/^\d+$/.test(m)){
+      return m.length < MIN_NUMERIC_MEMBER_LENGTH;
+    }
+
+    return m.length < 3;
+  }
+
+  function displayClassName(className){
+    const s = String(className || "");
+    return selectedDay === "WS" ? s.replace(/^WS_/, "") : s;
+  }
+
+  function updateDebug(raw, member){
+    debugEl.innerHTML =
+      "直近読取：" + escapeHtml(raw || "---") + "<br>" +
+      "抽出会員番号：<b>" + escapeHtml(member || "---") + "</b>";
+  }
+
+  function updateCurrent(){
+    currentEl.innerHTML =
+      "現在受付中：<br><b>" + escapeHtml(displayClassName(selectedClass || "---")) + "</b>";
+  }
+
+  function isClassVisible(className, day){
+    const s = String(className || "");
+    if(!s) return false;
+    if(day !== "WS" && s.startsWith("WS_")) return false;
+    if(s.includes("K×G")) return false;
+    return true;
+  }
+
+  function renderDays(){
+    dayGrid.innerHTML = "";
+
+    DAY_ORDER.forEach(day => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "day-btn" + (day === selectedDay ? " active" : "");
+      btn.textContent = day === "WS" ? "WS" : day + "曜";
+
+      btn.onclick = () => {
+        if(submitting) return;
+        selectedDay = day;
+        const list = (CLASSES_BY_DAY[selectedDay] || []).filter(c => isClassVisible(c, selectedDay));
+        selectedClass = list[0] || "";
+        renderDays();
+        renderClasses();
+        updateCurrent();
+        resetInput();
+      };
+
+      dayGrid.appendChild(btn);
+    });
+  }
+
+  function renderClasses(){
+    classGrid.innerHTML = "";
+
+    const list = (CLASSES_BY_DAY[selectedDay] || []).filter(c => isClassVisible(c, selectedDay));
+
+    list.forEach(className => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "class-btn" + (className === selectedClass ? " active" : "");
+      btn.textContent = displayClassName(className);
+
+      btn.onclick = () => {
+        if(submitting) return;
+        selectedClass = className;
+        renderClasses();
+        updateCurrent();
+        resetInput();
+      };
+
+      classGrid.appendChild(btn);
+    });
+  }
+
+  function focusInput(){
+    setTimeout(() => {
+      try{
+        memberInput.focus({ preventScroll:true });
+      }catch(e){
+        memberInput.focus();
+      }
+    }, 50);
+  }
+
+  function lockInput(){
+    submitting = true;
+    memberInput.disabled = true;
+  }
+
+  function unlockInput(){
+    submitting = false;
+    memberInput.disabled = false;
+    focusInput();
+  }
+
+  function resetInput(){
+    if(inputTimer){
+      clearTimeout(inputTimer);
+      inputTimer = null;
+    }
+
+    memberInput.value = "";
+    lastHandledRaw = "";
+    updateDebug("", "");
+    setStatus("読み取り待機中");
+    focusInput();
+  }
+
+  function showComplete(member, className){
+    completeText.innerHTML =
+      "<div class='complete-main'>✅ OK</div>" +
+      "<div class='complete-sub'>" +
+      escapeHtml(member) + "<br>" +
+      escapeHtml(displayClassName(className)) +
+      "</div>";
+
+    complete.style.display = "flex";
+  }
+
+  function hideComplete(){
+    complete.style.display = "none";
+  }
+
+  async function submitReception(rawValue){
+    if(submitting) return;
+
+    const raw = normalizeRaw(rawValue);
+    const member = extractMember(raw);
+
+    updateDebug(raw, member);
+
+    if(!member){
+      setStatus("読取失敗");
+      return;
+    }
+
+    if(isIncompleteMember(member)){
+      setStatus("読み取り不完全");
+      return;
+    }
+
+    if(!selectedClass){
+      alert("クラスを選択してください");
+      return;
+    }
+
+    lockInput();
+    memberInput.value = "";
+
+    try{
+      setStatus("重複確認中…");
+
+      const duplicate = await checkDuplicate(member, selectedClass, false);
+
+      if(duplicate){
+        setStatus("本日受付済み");
+        alert(
+          "この会員は本日すでに受付済みです。\n\n" +
+          "会員番号：" + member + "\n" +
+          "クラス：" + displayClassName(selectedClass)
+        );
+
+        setTimeout(() => {
+          unlockInput();
+          resetInput();
+        }, 700);
+
+        return;
+      }
+
+      setStatus("送信中…");
+      showComplete(member, selectedClass);
+
+      const url =
+        APP_CONFIG.FORM_RESPONSE +
+        "?" + APP_CONFIG.ENTRY_MEMBER + "=" + encodeURIComponent(member) +
+        "&" + APP_CONFIG.ENTRY_CLASS + "=" + encodeURIComponent(selectedClass);
+
+      await fetch(url, { method:"POST", mode:"no-cors" });
+
+      setStatus("受付完了");
+
+      setTimeout(() => {
+        hideComplete();
+        unlockInput();
+        resetInput();
+      }, COMPLETE_RESET_MS);
+
+    }catch(e){
+      console.log("submitReception error", e);
+      hideComplete();
+      setStatus("受付エラー");
+      alert("受付エラー");
+      unlockInput();
+      focusInput();
+    }
+  }
+
+  memberInput.addEventListener("input", () => {
+    if(submitting) return;
+
+    const raw = normalizeRaw(memberInput.value);
+    memberInput.value = raw;
+
+    const member = extractMember(raw);
+    updateDebug(raw, member);
+
+    if(inputTimer){
+      clearTimeout(inputTimer);
+    }
+
+    inputTimer = setTimeout(async () => {
+      const currentRaw = normalizeRaw(memberInput.value);
+
+      if(!currentRaw) return;
+      if(currentRaw === lastHandledRaw) return;
+
+      const currentMember = extractMember(currentRaw);
+      updateDebug(currentRaw, currentMember);
+
+      if(!currentMember){
+        setStatus("読み取り中…");
+        return;
+      }
+
+      if(isIncompleteMember(currentMember)){
+        setStatus("読み取り不完全");
+        return;
+      }
+
+      lastHandledRaw = currentRaw;
+      await submitReception(currentRaw);
+    }, INPUT_SETTLE_MS);
+  });
+
+  memberInput.addEventListener("keydown", (e) => {
+    if(e.key === "Enter"){
+      e.preventDefault();
+
+      if(submitting) return;
+
+      if(inputTimer){
+        clearTimeout(inputTimer);
+      }
+
+      inputTimer = setTimeout(async () => {
+        const currentRaw = normalizeRaw(memberInput.value);
+        if(!currentRaw) return;
+        if(currentRaw === lastHandledRaw) return;
+
+        lastHandledRaw = currentRaw;
+        await submitReception(currentRaw);
+      }, INPUT_SETTLE_MS);
+    }
+  });
+
+  memberInput.addEventListener("blur", () => {
+    if(!submitting){
+      focusInput();
+    }
+  });
+
+  const initialList = (CLASSES_BY_DAY[selectedDay] || []).filter(c => isClassVisible(c, selectedDay));
+  selectedClass = initialList[0] || "";
+
+  renderDays();
+  renderClasses();
+  updateCurrent();
+  setStatus("読み取り待機中");
+  focusInput();
+
+})();
+</script>
+
+</body>
+</html>
