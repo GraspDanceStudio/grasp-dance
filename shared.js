@@ -1,8 +1,5 @@
 (() => {
 
-  // =========================
-  // 共通設定
-  // =========================
   window.APP_CONFIG = {
     LIFF_ID: "2008912129-TQRCpL9d",
     FORM_RESPONSE:
@@ -16,9 +13,6 @@
     LOCAL_PENDING_MINUTES: 10
   };
 
-  // =========================
-  // 共通データ
-  // =========================
   window.DAY_MAP = ["月","火","水","木","金","土","WS"];
 
   window.CLASSES_BY_DAY = {
@@ -33,9 +27,6 @@
 
   let duplicateCacheMap = {};
 
-  // =========================
-  // 日付
-  // =========================
   window.getTokyoTodayString = function(){
     const parts = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Tokyo",
@@ -46,9 +37,7 @@
 
     const map = {};
     parts.forEach(p => {
-      if(p.type !== "literal"){
-        map[p.type] = p.value;
-      }
+      if(p.type !== "literal") map[p.type] = p.value;
     });
 
     return `${map.year}-${map.month}-${map.day}`;
@@ -62,9 +51,7 @@
 
     const map = {};
     parts.forEach(p => {
-      if(p.type !== "literal"){
-        map[p.type] = p.value;
-      }
+      if(p.type !== "literal") map[p.type] = p.value;
     });
 
     return map.year || String(new Date().getFullYear());
@@ -79,9 +66,7 @@
 
     const map = {};
     parts.forEach(p => {
-      if(p.type !== "literal"){
-        map[p.type] = p.value;
-      }
+      if(p.type !== "literal") map[p.type] = p.value;
     });
 
     return `${map.year}-${map.month}`;
@@ -106,9 +91,6 @@
     return map[wd] || "月";
   };
 
-  // =========================
-  // HTML escape
-  // =========================
   window.escapeHtml = function(str){
     return String(str)
       .replaceAll("&","&amp;")
@@ -118,9 +100,6 @@
       .replaceAll("'","&#039;");
   };
 
-  // =========================
-  // 文字補正
-  // =========================
   function toHalfWidthAscii(str){
     return String(str || "").replace(/[！-～]/g, ch =>
       String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)
@@ -188,9 +167,6 @@
     return s;
   }
 
-  // =========================
-  // 会員番号正規化
-  // =========================
   window.normalizeMember = function(value){
     let s = cleanupScanNoise(value);
 
@@ -247,9 +223,6 @@
     return s;
   };
 
-  // =========================
-  // 先頭0維持比較
-  // =========================
   function isSameMemberId(a, b){
     const aa = window.normalizeMember(a);
     const bb = window.normalizeMember(b);
@@ -259,9 +232,6 @@
     return aa === bb;
   }
 
-  // =========================
-  // クラス名
-  // =========================
   function normalizeClassName(value){
     return String(value || "")
       .replace(/\u3000/g, " ")
@@ -271,12 +241,7 @@
 
   function displayClassName(day, className){
     const s = String(className || "");
-
-    if(day === "WS"){
-      return s.replace(/^WS_/, "");
-    }
-
-    return s;
+    return day === "WS" ? s.replace(/^WS_/, "") : s;
   }
 
   function escapeForGvizString(value){
@@ -334,9 +299,6 @@
     return s;
   }
 
-  // =========================
-  // ローカル保存
-  // =========================
   function getLocalPendingStorageKey(){
     return "danceStudioPendingReceipts";
   }
@@ -521,9 +483,6 @@
   window.addLocalConfirmedClasses = addLocalConfirmedClasses;
   window.promotePendingToConfirmed = promotePendingToConfirmed;
 
-  // =========================
-  // LIFF
-  // =========================
   window.initLiffSafe = async function(){
     try{
       if(typeof liff !== "undefined"){
@@ -536,9 +495,6 @@
     }
   };
 
-  // =========================
-  // 受講数照会
-  // =========================
   window.fetchCount = async function(member){
     const cleanMember = window.normalizeMember(member);
     const ym = getTokyoYearMonth();
@@ -635,9 +591,6 @@
     },3000);
   };
 
-  // =========================
-  // 重複チェック
-  // =========================
   function getDuplicateCacheKey(member, date){
     return `${date}__${member}`;
   }
@@ -649,10 +602,10 @@
 
     if(!cleanMember) return duplicateSet;
 
-    const tq = [
-      "select B,C,D",
-      "where D = '" + escapeForGvizString(today) + "'"
-    ].join(" ");
+    // ★重要修正：
+    // where D = 今日 は使わない。
+    // シート側の日付型/表示形式で落ちることがあるため、取得後にJS側で判定する。
+    const tq = "select B,C,D";
 
     const url =
       "https://docs.google.com/spreadsheets/d/" +
@@ -772,9 +725,6 @@
     return duplicates.includes(normalizeClassName(className));
   };
 
-  // =========================
-  // 曜日ボタン index用
-  // =========================
   window.renderDayButtons = function({
     dayButtonsEl,
     selectedDay,
@@ -803,9 +753,6 @@
     });
   };
 
-  // =========================
-  // クラスボタン index用
-  // =========================
   window.renderClasses = function({
     day,
     titleEl,
