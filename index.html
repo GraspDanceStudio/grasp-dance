@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>受付</title>
 
-<script src="shared.js?v=20260427-3"></script>
+<script src="shared.js?v=20260427-4"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
@@ -158,10 +158,6 @@ display:block;
 
   setCurrentMember(firstMember);
 
-  /* =====================
-     QR再読取
-  ===================== */
-
   window.openScanner = function(){
     if(typeof liff !== "undefined" && liff.isInClient()){
       liff.scanCodeV2()
@@ -180,6 +176,7 @@ display:block;
 
             if(scannedMember){
               setCurrentMember(scannedMember);
+
               if(typeof clearDuplicateCache === "function"){
                 clearDuplicateCache(scannedMember);
               }
@@ -209,10 +206,6 @@ display:block;
     }
   };
 
-  /* =====================
-     受講数照会
-  ===================== */
-
   remainBtn.onclick = async () => {
     const currentMember = normalizeMember(window.currentMember);
 
@@ -230,10 +223,6 @@ display:block;
       console.log("remainBtn error", e);
     }
   };
-
-  /* =====================
-     受付処理
-  ===================== */
 
   async function submit(classNames){
 
@@ -276,10 +265,6 @@ display:block;
 
       await Promise.all(requests);
 
-      if(typeof promotePendingToConfirmed === "function"){
-        promotePendingToConfirmed(currentMember, classes);
-      }
-
       if(typeof clearDuplicateCache === "function"){
         clearDuplicateCache(currentMember);
       }
@@ -295,16 +280,8 @@ display:block;
       alert("送信エラー");
       submitting = false;
       complete.style.display = "none";
-
-      if(typeof removeLocalPendingClasses === "function"){
-        removeLocalPendingClasses(currentMember, classes);
-      }
     }
   }
-
-  /* =====================
-     描画
-  ===================== */
 
   function renderAll(){
     renderDayButtons({
