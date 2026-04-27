@@ -528,47 +528,50 @@
     return `${date}__${member}`;
   }
 
-  async function fetchTodayRemoteDuplicateClassSet(member){
-    const cleanMember = window.normalizeMember(member);
-    const today = window.getTokyoTodayString();
-    const duplicateSet = new Set();
+async function fetchTodayRemoteDuplicateClassSet(member){
+  const cleanMember = window.normalizeMember(member);
+  const today = window.getTokyoTodayString();
+  const duplicateSet = new Set();
 
-    if(!cleanMember) return duplicateSet;
+  if(!cleanMember) return duplicateSet;
 
-    const tq = "select B,C,D";
+  const tq =
+    "select B,C,D where D='" +
+    escapeForGvizString(today) +
+    "'";
 
-    const url =
-      "https://docs.google.com/spreadsheets/d/" +
-      window.APP_CONFIG.SPREADSHEET_ID +
-      "/gviz/tq?tqx=out:json&gid=" +
-      window.APP_CONFIG.DUPLICATE_GID +
-      "&tq=" +
-      encodeURIComponent(tq);
+  const url =
+    "https://docs.google.com/spreadsheets/d/" +
+    window.APP_CONFIG.SPREADSHEET_ID +
+    "/gviz/tq?tqx=out:json&gid=" +
+    window.APP_CONFIG.DUPLICATE_GID +
+    "&tq=" +
+    encodeURIComponent(tq);
 
-    try{
-      const res = await fetch(url,{cache:"no-store"});
-      const text = await res.text();
-      const json = parseGvizJson(text);
-      const rows = json.table?.rows || [];
+  try{
+    const res = await fetch(url,{cache:"no-store"});
+    const text = await res.text();
+    const json = parseGvizJson(text);
+    const rows = json.table?.rows || [];
 
-      rows.forEach(r => {
-        const rawMember = r.c?.[0]?.v ?? r.c?.[0]?.f ?? "";
-        const cls = normalizeClassName(r.c?.[1]?.v || r.c?.[1]?.f || "");
-        const date = normalizeSheetDateCell(r.c?.[2]?.v ?? r.c?.[2]?.f ?? "");
+    rows.forEach(r => {
+      const rawMember = r.c?.[0]?.v ?? r.c?.[0]?.f ?? "";
+      const cls = normalizeClassName(r.c?.[1]?.v ?? r.c?.[1]?.f ?? "");
+      const date = normalizeSheetDateCell(r.c?.[2]?.v ?? r.c?.[2]?.f ?? "");
 
-        if(!cls) return;
-        if(date !== today) return;
-        if(!isSameMemberId(rawMember, cleanMember)) return;
+      if(!cls) return;
+      if(date !== today) return;
+      if(!isSameMemberId(rawMember, cleanMember)) return;
 
-        duplicateSet.add(cls);
-      });
+      duplicateSet.add(cls);
+    });
 
-    }catch(e){
-      console.log("fetchTodayRemoteDuplicateClassSet error:", e);
-    }
-
-    return duplicateSet;
+  }catch(e){
+    console.log("fetchTodayRemoteDuplicateClassSet error:", e);
   }
+
+  return duplicateSet;
+}
 
   window.getTodayRemoteDuplicateClassSet = async function(member, forceRefresh = false){
     const cleanMember = window.normalizeMember(member);
