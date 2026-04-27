@@ -79,13 +79,8 @@
     }).format(new Date());
 
     const map = {
-      Sun:"日",
-      Mon:"月",
-      Tue:"火",
-      Wed:"水",
-      Thu:"木",
-      Fri:"金",
-      Sat:"土"
+      Sun:"日", Mon:"月", Tue:"火", Wed:"水",
+      Thu:"木", Fri:"金", Sat:"土"
     };
 
     return map[wd] || "月";
@@ -187,35 +182,22 @@
 
     for(const source of candidates){
       const m1 = source.match(/[?&]member=([A-Za-z0-9\-_]+)/i);
-      if(m1 && m1[1]){
-        return String(m1[1]).trim().toUpperCase();
-      }
+      if(m1 && m1[1]) return String(m1[1]).trim().toUpperCase();
 
       const m2 = source.match(/member=([A-Za-z0-9\-_]+)/i);
-      if(m2 && m2[1]){
-        return String(m2[1]).trim().toUpperCase();
-      }
+      if(m2 && m2[1]) return String(m2[1]).trim().toUpperCase();
 
       const m3 = source.match(/member[^A-Za-z0-9]{0,5}([A-Za-z0-9\-_]{3,})/i);
-      if(m3 && m3[1]){
-        return String(m3[1]).trim().toUpperCase();
-      }
+      if(m3 && m3[1]) return String(m3[1]).trim().toUpperCase();
 
       const m4 = source.match(/member([A-Za-z0-9\-_]{3,})/i);
-      if(m4 && m4[1]){
-        return String(m4[1]).trim().toUpperCase();
-      }
+      if(m4 && m4[1]) return String(m4[1]).trim().toUpperCase();
 
       const m5 = source.match(/(\d{7,8})(?!.*\d)/);
-      if(m5 && m5[1]){
-        return m5[1];
-      }
+      if(m5 && m5[1]) return m5[1];
     }
 
-    s = String(s || "")
-      .split("?")[0]
-      .trim();
-
+    s = String(s || "").split("?")[0].trim();
     s = cleanupScanNoise(s);
     s = s.replace(/[^A-Za-z0-9\-_]/g, "");
     s = s.toUpperCase();
@@ -226,9 +208,7 @@
   function isSameMemberId(a, b){
     const aa = window.normalizeMember(a);
     const bb = window.normalizeMember(b);
-
     if(!aa || !bb) return false;
-
     return aa === bb;
   }
 
@@ -270,30 +250,18 @@
 
     const m1 = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})(?:\s.*)?$/);
     if(m1){
-      return (
-        m1[1] + "-" +
-        String(m1[2]).padStart(2, "0") + "-" +
-        String(m1[3]).padStart(2, "0")
-      );
+      return m1[1] + "-" + String(m1[2]).padStart(2, "0") + "-" + String(m1[3]).padStart(2, "0");
     }
 
     const m2 = s.match(/^(\d{1,2})[-\/](\d{1,2})(?:\s.*)?$/);
     if(m2){
       const todayYear = getTokyoYear();
-      return (
-        todayYear + "-" +
-        String(m2[1]).padStart(2, "0") + "-" +
-        String(m2[2]).padStart(2, "0")
-      );
+      return todayYear + "-" + String(m2[1]).padStart(2, "0") + "-" + String(m2[2]).padStart(2, "0");
     }
 
     const m3 = s.match(/^Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2})/);
     if(m3){
-      return (
-        m3[1] + "-" +
-        String(Number(m3[2]) + 1).padStart(2, "0") + "-" +
-        String(m3[3]).padStart(2, "0")
-      );
+      return m3[1] + "-" + String(Number(m3[2]) + 1).padStart(2, "0") + "-" + String(m3[3]).padStart(2, "0");
     }
 
     return s;
@@ -334,9 +302,7 @@
 
     Object.keys(map).forEach(key => {
       const arr = Array.isArray(map[key]) ? map[key] : [];
-      const filtered = arr.filter(item => {
-        return item && item.className && item.expiresAt && item.expiresAt > now;
-      });
+      const filtered = arr.filter(item => item && item.className && item.expiresAt && item.expiresAt > now);
 
       if(filtered.length > 0){
         if(filtered.length !== arr.length){
@@ -349,10 +315,7 @@
       }
     });
 
-    if(changed){
-      writeJsonStorage(getLocalPendingStorageKey(), map);
-    }
-
+    if(changed) writeJsonStorage(getLocalPendingStorageKey(), map);
     return map;
   }
 
@@ -368,10 +331,7 @@
       }
     });
 
-    if(changed){
-      writeJsonStorage(getLocalConfirmedStorageKey(), map);
-    }
-
+    if(changed) writeJsonStorage(getLocalConfirmedStorageKey(), map);
     return map;
   }
 
@@ -434,15 +394,10 @@
     const arr = Array.isArray(map[key]) ? map[key] : [];
     const removeSet = new Set((classNames || []).map(c => normalizeClassName(c)));
 
-    const filtered = arr.filter(item => {
-      return !removeSet.has(normalizeClassName(item.className));
-    });
+    const filtered = arr.filter(item => !removeSet.has(normalizeClassName(item.className)));
 
-    if(filtered.length > 0){
-      map[key] = filtered;
-    }else{
-      delete map[key];
-    }
+    if(filtered.length > 0) map[key] = filtered;
+    else delete map[key];
 
     writeJsonStorage(getLocalPendingStorageKey(), map);
   }
@@ -457,16 +412,12 @@
 
     current.forEach(cls => {
       const normalized = normalizeClassName(cls);
-      if(normalized){
-        byClass.set(normalized, normalized);
-      }
+      if(normalized) byClass.set(normalized, normalized);
     });
 
     (classNames || []).forEach(cls => {
       const normalized = normalizeClassName(cls);
-      if(normalized){
-        byClass.set(normalized, normalized);
-      }
+      if(normalized) byClass.set(normalized, normalized);
     });
 
     map[key] = Array.from(byClass.values());
@@ -486,9 +437,7 @@
   window.initLiffSafe = async function(){
     try{
       if(typeof liff !== "undefined"){
-        await liff.init({
-          liffId: window.APP_CONFIG.LIFF_ID
-        });
+        await liff.init({ liffId: window.APP_CONFIG.LIFF_ID });
       }
     }catch(e){
       console.log("LIFF init error:", e);
@@ -518,52 +467,37 @@
       const text = await res.text();
 
       const json = JSON.parse(
-        text.substring(
-          text.indexOf("{"),
-          text.lastIndexOf("}") + 1
-        )
+        text.substring(text.indexOf("{"), text.lastIndexOf("}") + 1)
       );
 
       const rows = json.table?.rows || [];
 
       if(rows.length > 0){
         const count = Number(rows[0].c?.[0]?.v || 0);
-
         let last = "";
+
         if(rows[0].c?.[1]?.f){
           const f = rows[0].c[1].f;
           const parts = f.split(" ")[0].split("/");
-          if(parts.length >= 3){
-            last = Number(parts[1]) + "/" + Number(parts[2]);
-          }else{
-            last = f;
-          }
+          if(parts.length >= 3) last = Number(parts[1]) + "/" + Number(parts[2]);
+          else last = f;
         }else if(rows[0].c?.[1]?.v){
           last = String(rows[0].c[1].v || "");
         }
 
-        return {
-          member: cleanMember,
-          count,
-          last
-        };
+        return { member: cleanMember, count, last };
       }
 
     }catch(e){
       console.log("fetchCount error:", e);
     }
 
-    return {
-      member: cleanMember,
-      count:0,
-      last:""
-    };
+    return { member: cleanMember, count:0, last:"" };
   };
 
   window.showLoading = function(){
     const complete = document.getElementById("complete");
     const completeDetail = document.getElementById("completeDetail");
-
     if(!complete || !completeDetail) return;
 
     completeDetail.innerHTML =
@@ -575,7 +509,6 @@
   window.showCount = function(data){
     const complete = document.getElementById("complete");
     const completeDetail = document.getElementById("completeDetail");
-
     if(!complete || !completeDetail) return;
 
     completeDetail.innerHTML =
@@ -602,9 +535,6 @@
 
     if(!cleanMember) return duplicateSet;
 
-    // ★重要修正：
-    // where D = 今日 は使わない。
-    // シート側の日付型/表示形式で落ちることがあるため、取得後にJS側で判定する。
     const tq = "select B,C,D";
 
     const url =
@@ -646,7 +576,6 @@
     const cacheKey = getDuplicateCacheKey(cleanMember, today);
     const now = Date.now();
     const cacheMs = Number(window.APP_CONFIG.DUPLICATE_CACHE_MS || 0);
-
     const cached = duplicateCacheMap[cacheKey];
 
     if(
@@ -725,40 +654,20 @@
     return duplicates.includes(normalizeClassName(className));
   };
 
-  window.renderDayButtons = function({
-    dayButtonsEl,
-    selectedDay,
-    onSelect
-  }){
+  window.renderDayButtons = function({ dayButtonsEl, selectedDay, onSelect }){
     dayButtonsEl.innerHTML = "";
 
     window.DAY_MAP.forEach(day => {
       const btn = document.createElement("button");
-
       btn.type = "button";
-      btn.className =
-        "day-btn" +
-        (day === selectedDay ? " today" : "");
-
-      btn.textContent =
-        day === "WS"
-          ? "WS"
-          : `${day}曜`;
-
-      btn.onclick = () => {
-        onSelect(day);
-      };
-
+      btn.className = "day-btn" + (day === selectedDay ? " today" : "");
+      btn.textContent = day === "WS" ? "WS" : `${day}曜`;
+      btn.onclick = () => onSelect(day);
       dayButtonsEl.appendChild(btn);
     });
   };
 
-  window.renderClasses = function({
-    day,
-    titleEl,
-    containerEl,
-    onSubmit
-  }){
+  window.renderClasses = function({ day, titleEl, containerEl, onSubmit }){
 
     titleEl.textContent =
       day === "WS"
@@ -791,12 +700,7 @@
       selectedBox.innerHTML =
         "<b>選択中：</b><br>" +
         selectedClasses
-          .map(c =>
-            "・" +
-            window.escapeHtml(
-              displayClassName(day,c)
-            )
-          )
+          .map(c => "・" + window.escapeHtml(displayClassName(day,c)))
           .join("<br>");
 
       confirmBtn.style.display = "block";
@@ -810,30 +714,21 @@
         return;
       }
 
-      if(raw.includes("K×G")){
-        return;
-      }
-
       const btn = document.createElement("button");
-
       btn.type = "button";
       btn.className = "class-btn";
-      btn.textContent =
-        "受付 ▶ " +
-        displayClassName(day,className);
+      btn.textContent = "受付 ▶ " + displayClassName(day,className);
 
       btn.onclick = () => {
         const idx = selectedClasses.indexOf(className);
 
         if(idx >= 0){
           selectedClasses.splice(idx,1);
-
           btn.style.background = "";
           btn.style.color = "";
           btn.style.fontWeight = "";
         }else{
           selectedClasses.push(className);
-
           btn.style.background = "#66ADFF";
           btn.style.color = "#fff";
           btn.style.fontWeight = "bold";
@@ -854,11 +749,7 @@
         return;
       }
 
-      await Promise.resolve(
-        onSubmit(
-          selectedClasses.slice()
-        )
-      );
+      await Promise.resolve(onSubmit(selectedClasses.slice()));
     };
   };
 
