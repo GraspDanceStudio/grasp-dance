@@ -231,11 +231,10 @@
   }
 
   function parseGvizJson(text){
-    return JSON.parse(
-      text.replace("/*O_o*/","")
-          .replace("google.visualization.Query.setResponse(","")
-          .slice(0,-2)
-    );
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if(start < 0 || end < 0) throw new Error("Invalid gviz response");
+    return JSON.parse(text.substring(start, end + 1));
   }
 
   function normalizeSheetDateCell(cellValue){
@@ -350,7 +349,7 @@
     const map = cleanupLocalConfirmed();
     const key = getLocalReceiptKey(cleanMember, today);
     const arr = Array.isArray(map[key]) ? map[key] : [];
-    return new Set(arr.map(item => normalizeClassName(item.className)));
+    return new Set(arr.map(item => normalizeClassName(item)));
   }
 
   function addLocalPendingClasses(member, classNames){
@@ -466,10 +465,7 @@
       const res = await fetch(url,{cache:"no-store"});
       const text = await res.text();
 
-      const json = JSON.parse(
-        text.substring(text.indexOf("{"), text.lastIndexOf("}") + 1)
-      );
-
+      const json = parseGvizJson(text);
       const rows = json.table?.rows || [];
 
       if(rows.length > 0){
@@ -528,50 +524,50 @@
     return `${date}__${member}`;
   }
 
-async function fetchTodayRemoteDuplicateClassSet(member){
-  const cleanMember = window.normalizeMember(member);
-  const today = window.getTokyoTodayString();
-  const duplicateSet = new Set();
+  async function fetchTodayRemoteDuplicateClassSet(member){
+    const cleanMember = window.normalizeMember(member);
+    const today = window.getTokyoTodayString();
+    const duplicateSet = new Set();
 
-  if(!cleanMember) return duplicateSet;
+    if(!cleanMember) return duplicateSet;
 
-  const tq =
-    "select B,C,D where D='" +
-    escapeForGvizString(today) +
-    "'";
+    const tq =
+      "select B,C,D where D='" +
+      escapeForGvizString(today) +
+      "'";
 
-  const url =
-    "https://docs.google.com/spreadsheets/d/" +
-    window.APP_CONFIG.SPREADSHEET_ID +
-    "/gviz/tq?tqx=out:json&gid=" +
-    window.APP_CONFIG.DUPLICATE_GID +
-    "&tq=" +
-    encodeURIComponent(tq);
+    const url =
+      "https://docs.google.com/spreadsheets/d/" +
+      window.APP_CONFIG.SPREADSHEET_ID +
+      "/gviz/tq?tqx=out:json&gid=" +
+      window.APP_CONFIG.DUPLICATE_GID +
+      "&tq=" +
+      encodeURIComponent(tq);
 
-  try{
-    const res = await fetch(url,{cache:"no-store"});
-    const text = await res.text();
-    const json = parseGvizJson(text);
-    const rows = json.table?.rows || [];
+    try{
+      const res = await fetch(url,{cache:"no-store"});
+      const text = await res.text();
+      const json = parseGvizJson(text);
+      const rows = json.table?.rows || [];
 
-    rows.forEach(r => {
-      const rawMember = r.c?.[0]?.v ?? r.c?.[0]?.f ?? "";
-      const cls = normalizeClassName(r.c?.[1]?.v ?? r.c?.[1]?.f ?? "");
-      const date = normalizeSheetDateCell(r.c?.[2]?.v ?? r.c?.[2]?.f ?? "");
+      rows.forEach(r => {
+        const rawMember = r.c?.[0]?.v ?? r.c?.[0]?.f ?? "";
+        const cls = normalizeClassName(r.c?.[1]?.v ?? r.c?.[1]?.f ?? "");
+        const date = normalizeSheetDateCell(r.c?.[2]?.v ?? r.c?.[2]?.f ?? "");
 
-      if(!cls) return;
-      if(date !== today) return;
-      if(!isSameMemberId(rawMember, cleanMember)) return;
+        if(!cls) return;
+        if(date !== today) return;
+        if(!isSameMemberId(rawMember, cleanMember)) return;
 
-      duplicateSet.add(cls);
-    });
+        duplicateSet.add(cls);
+      });
 
-  }catch(e){
-    console.log("fetchTodayRemoteDuplicateClassSet error:", e);
+    }catch(e){
+      console.log("fetchTodayRemoteDuplicateClassSet error:", e);
+    }
+
+    return duplicateSet;
   }
-
-  return duplicateSet;
-}
 
   window.getTodayRemoteDuplicateClassSet = async function(member, forceRefresh = false){
     const cleanMember = window.normalizeMember(member);
@@ -657,6 +653,34 @@ async function fetchTodayRemoteDuplicateClassSet(member){
     return duplicates.includes(normalizeClassName(className));
   };
 
+  function getCurrentMemberForDuplicateCheck(){
+    return window.currentMember ||
+      document.getElementById("memberInput")?.value ||
+      document.getElementById("member")?.value ||
+      "";
+  }
+
+  function markButtonAsAccepted(btn, day, className){
+    btn.disabled = true;
+    btn.style.background = "#b8b8b8";
+    btn.style.color = "#666";
+    btn.style.fontWeight = "bold";
+    btn.style.opacity = "1";
+    btn.textContent = "受付済み ✓ " + displayClassName(day, className);
+  }
+
+  function markButtonAsSelected(btn){
+    btn.style.background = "#66ADFF";
+    btn.style.color = "#fff";
+    btn.style.fontWeight = "bold";
+  }
+
+  function clearButtonSelectedStyle(btn){
+    btn.style.background = "";
+    btn.style.color = "";
+    btn.style.fontWeight = "";
+  }
+
   window.renderDayButtons = function({ dayButtonsEl, selectedDay, onSelect }){
     dayButtonsEl.innerHTML = "";
 
@@ -681,6 +705,7 @@ async function fetchTodayRemoteDuplicateClassSet(member){
 
     const list = window.CLASSES_BY_DAY[day] || [];
     const selectedClasses = [];
+    const buttonMap = new Map();
 
     const selectedBox = document.createElement("div");
     selectedBox.style.fontSize = "24px";
@@ -709,6 +734,22 @@ async function fetchTodayRemoteDuplicateClassSet(member){
       confirmBtn.style.display = "block";
     }
 
+    function removeSelectedClass(className){
+      const idx = selectedClasses.indexOf(className);
+      if(idx >= 0) selectedClasses.splice(idx, 1);
+      refreshSelected();
+    }
+
+    function applyDuplicateButtons(duplicateSet){
+      buttonMap.forEach((btn, className) => {
+        const normalized = normalizeClassName(className);
+        if(duplicateSet.has(normalized)){
+          removeSelectedClass(className);
+          markButtonAsAccepted(btn, day, className);
+        }
+      });
+    }
+
     list.forEach(className => {
 
       const raw = String(className || "");
@@ -722,19 +763,19 @@ async function fetchTodayRemoteDuplicateClassSet(member){
       btn.className = "class-btn";
       btn.textContent = "受付 ▶ " + displayClassName(day,className);
 
+      buttonMap.set(className, btn);
+
       btn.onclick = () => {
+        if(btn.disabled) return;
+
         const idx = selectedClasses.indexOf(className);
 
         if(idx >= 0){
           selectedClasses.splice(idx,1);
-          btn.style.background = "";
-          btn.style.color = "";
-          btn.style.fontWeight = "";
+          clearButtonSelectedStyle(btn);
         }else{
           selectedClasses.push(className);
-          btn.style.background = "#66ADFF";
-          btn.style.color = "#fff";
-          btn.style.fontWeight = "bold";
+          markButtonAsSelected(btn);
         }
 
         refreshSelected();
@@ -746,10 +787,42 @@ async function fetchTodayRemoteDuplicateClassSet(member){
     containerEl.appendChild(selectedBox);
     containerEl.appendChild(confirmBtn);
 
+    const memberForCheck = getCurrentMemberForDuplicateCheck();
+
+    if(memberForCheck){
+      window.getTodayDuplicateClassSet(memberForCheck, false)
+        .then(duplicateSet => {
+          applyDuplicateButtons(duplicateSet);
+        })
+        .catch(err => {
+          console.log("duplicate button render error:", err);
+        });
+    }
+
     confirmBtn.onclick = async () => {
       if(!selectedClasses.length){
         alert("クラスを選択してください");
         return;
+      }
+
+      const member = getCurrentMemberForDuplicateCheck();
+
+      if(member){
+        const duplicates = await window.getTodayDuplicateClasses(member, selectedClasses, true);
+
+        if(duplicates.length > 0){
+          alert(
+            "すでに受付済みのクラスがあります。\n\n" +
+            duplicates.map(c => "・" + c).join("\n")
+          );
+
+          const duplicateSet = new Set(duplicates.map(normalizeClassName));
+          applyDuplicateButtons(duplicateSet);
+          return;
+        }
+
+        addLocalPendingClasses(member, selectedClasses);
+        applyDuplicateButtons(new Set(selectedClasses.map(normalizeClassName)));
       }
 
       await Promise.resolve(onSubmit(selectedClasses.slice()));
