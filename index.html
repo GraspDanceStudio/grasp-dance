@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>受付</title>
 
-<script src="shared.js?v=20260427-2"></script>
+<script src="shared.js?v=20260427-3"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
@@ -104,30 +104,51 @@ display:block;
 
   await initLiffSafe();
 
-  let member = null;
+  const title = document.getElementById("title");
+  const container = document.getElementById("container");
+  const dayButtons = document.getElementById("dayButtons");
+  const complete = document.getElementById("complete");
+  const completeDetail = document.getElementById("completeDetail");
+  const remainBtn = document.getElementById("remainBtn");
 
-  const params = new URLSearchParams(window.location.search);
-  member = params.get("member");
+  let selectedDay = getTokyoWeekdayLabel();
+  if(selectedDay === "日") selectedDay = "月";
 
-  if(member){
-    member = normalizeMember(member);
-  }
+  let submitting = false;
+  const cleanBaseUrl = location.origin + location.pathname;
 
-  if(!member){
-    const url = new URL(location.href);
-    member = url.searchParams.get("member");
+  function getMemberFromUrl(){
+    let m = "";
 
-    if(member){
-      member = normalizeMember(member);
+    try{
+      const params = new URLSearchParams(window.location.search);
+      m = params.get("member") || "";
+    }catch(e){}
+
+    if(!m){
+      try{
+        const url = new URL(location.href);
+        m = url.searchParams.get("member") || "";
+      }catch(e){}
     }
+
+    return normalizeMember(m || "");
   }
 
-  if(!member && typeof liff !== "undefined"){
+  function setCurrentMember(value){
+    const m = normalizeMember(value || "");
+    window.currentMember = m;
+    return m;
+  }
+
+  let firstMember = getMemberFromUrl();
+
+  if(!firstMember && typeof liff !== "undefined"){
     try{
       if(liff.isInClient()){
         const ctx = liff.getContext();
         if(ctx && ctx.queryParams && ctx.queryParams.member){
-          member = normalizeMember(ctx.queryParams.member);
+          firstMember = normalizeMember(ctx.queryParams.member);
         }
       }
     }catch(e){
@@ -135,19 +156,7 @@ display:block;
     }
   }
 
-  window.currentMember = normalizeMember(member || "");
-
-  const title = document.getElementById("title");
-  const container = document.getElementById("container");
-  const dayButtons = document.getElementById("dayButtons");
-  const complete = document.getElementById("complete");
-  const completeDetail = document.getElementById("completeDetail");
-
-  let selectedDay = getTokyoWeekdayLabel();
-  if(selectedDay === "日") selectedDay = "月";
-
-  let submitting = false;
-  const cleanBaseUrl = location.origin + location.pathname;
+  setCurrentMember(firstMember);
 
   /* =====================
      QR再読取
@@ -158,32 +167,37 @@ display:block;
       liff.scanCodeV2()
         .then(result => {
           if(result && result.value){
+            let scannedMember = "";
+
             try{
               const scannedUrl = new URL(result.value);
-              let scannedMember = scannedUrl.searchParams.get("member");
-
-              if(scannedMember){
-                scannedMember = normalizeMember(scannedMember);
-                window.currentMember = scannedMember;
-
-                renderAll();
-
-                completeDetail.innerHTML =
-                  "<span class='complete-title'>✅ 読み取り完了</span><br><br>" +
-                  "会員番号：<b>" + escapeHtml(scannedMember) + "</b><br><br>" +
-                  "<span>クラスを選択してください</span>";
-
-                complete.style.display = "flex";
-
-                setTimeout(() => {
-                  complete.style.display = "none";
-                }, 700);
-              }else{
-                alert("QRから会員番号を取得できませんでした");
-              }
+              scannedMember = scannedUrl.searchParams.get("member") || "";
             }catch(e){
-              console.log("scan parse error", e);
-              alert("QRの読み取り結果を解析できませんでした");
+              scannedMember = result.value || "";
+            }
+
+            scannedMember = normalizeMember(scannedMember);
+
+            if(scannedMember){
+              setCurrentMember(scannedMember);
+              if(typeof clearDuplicateCache === "function"){
+                clearDuplicateCache(scannedMember);
+              }
+
+              renderAll();
+
+              completeDetail.innerHTML =
+                "<span class='complete-title'>✅ 読み取り完了</span><br><br>" +
+                "会員番号：<b>" + escapeHtml(scannedMember) + "</b><br><br>" +
+                "<span>クラスを選択してください</span>";
+
+              complete.style.display = "flex";
+
+              setTimeout(() => {
+                complete.style.display = "none";
+              }, 700);
+            }else{
+              alert("QRから会員番号を取得できませんでした");
             }
           }
         })
@@ -199,7 +213,7 @@ display:block;
      受講数照会
   ===================== */
 
-  document.getElementById("remainBtn").onclick = async () => {
+  remainBtn.onclick = async () => {
     const currentMember = normalizeMember(window.currentMember);
 
     if(!currentMember){
@@ -218,16 +232,30 @@ display:block;
   };
 
   /* =====================
-     受付処理（※ここ重要）
+     受付処理
   ===================== */
 
   async function submit(classNames){
 
     if(submitting) return;
-    submitting = true;
 
     const currentMember = normalizeMember(window.currentMember);
-    const classes = Array.isArray(classNames) ? classNames.slice() : [classNames];
+
+    if(!currentMember){
+      alert("会員QRを読み取ってください");
+      return;
+    }
+
+    const classes = (Array.isArray(classNames) ? classNames : [classNames])
+      .map(c => String(c || "").trim())
+      .filter(c => c);
+
+    if(classes.length === 0){
+      alert("クラスを選択してください");
+      return;
+    }
+
+    submitting = true;
 
     completeDetail.innerHTML =
       "<span class='complete-title'>✅ 受付完了</span><br><br>" +
@@ -237,24 +265,40 @@ display:block;
     complete.style.display = "flex";
 
     try{
-      for(const className of classes){
+      const requests = classes.map(className => {
         const url =
           APP_CONFIG.FORM_RESPONSE +
           "?" + APP_CONFIG.ENTRY_MEMBER + "=" + encodeURIComponent(currentMember) +
           "&" + APP_CONFIG.ENTRY_CLASS + "=" + encodeURIComponent(className);
 
-        await fetch(url, { method:"POST", mode:"no-cors" });
+        return fetch(url, { method:"POST", mode:"no-cors" });
+      });
+
+      await Promise.all(requests);
+
+      if(typeof promotePendingToConfirmed === "function"){
+        promotePendingToConfirmed(currentMember, classes);
+      }
+
+      if(typeof clearDuplicateCache === "function"){
+        clearDuplicateCache(currentMember);
       }
 
       setTimeout(() => {
         complete.style.display = "none";
-        openScanner();
         submitting = false;
+        openScanner();
       }, 1200);
 
     }catch(e){
+      console.log("submit error", e);
       alert("送信エラー");
       submitting = false;
+      complete.style.display = "none";
+
+      if(typeof removeLocalPendingClasses === "function"){
+        removeLocalPendingClasses(currentMember, classes);
+      }
     }
   }
 
