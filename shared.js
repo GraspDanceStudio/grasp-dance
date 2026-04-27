@@ -9,8 +9,7 @@
     SPREADSHEET_ID: "1z7xSOOjsXyuQn5p9aE3tl5fgzIMkxoLKVnnpTYUTS9k",
     DUPLICATE_GID: "969068048",
     COUNT_GID: "218311726",
-    DUPLICATE_CACHE_MS: 10000,
-    LOCAL_PENDING_MINUTES: 10
+    DUPLICATE_CACHE_MS: 10000
   };
 
   window.DAY_MAP = ["月","火","水","木","金","土","WS"];
@@ -266,173 +265,6 @@
     return s;
   }
 
-  function getLocalPendingStorageKey(){
-    return "danceStudioPendingReceipts";
-  }
-
-  function getLocalConfirmedStorageKey(){
-    return "danceStudioConfirmedReceipts";
-  }
-
-  function readJsonStorage(key){
-    try{
-      const raw = localStorage.getItem(key);
-      const obj = raw ? JSON.parse(raw) : {};
-      return obj && typeof obj === "object" ? obj : {};
-    }catch(e){
-      return {};
-    }
-  }
-
-  function writeJsonStorage(key, map){
-    try{
-      localStorage.setItem(key, JSON.stringify(map));
-    }catch(e){}
-  }
-
-  function getLocalReceiptKey(member, date){
-    return `${date}__${member}`;
-  }
-
-  function cleanupLocalPending(){
-    const map = readJsonStorage(getLocalPendingStorageKey());
-    const now = Date.now();
-    let changed = false;
-
-    Object.keys(map).forEach(key => {
-      const arr = Array.isArray(map[key]) ? map[key] : [];
-      const filtered = arr.filter(item => item && item.className && item.expiresAt && item.expiresAt > now);
-
-      if(filtered.length > 0){
-        if(filtered.length !== arr.length){
-          map[key] = filtered;
-          changed = true;
-        }
-      }else{
-        delete map[key];
-        changed = true;
-      }
-    });
-
-    if(changed) writeJsonStorage(getLocalPendingStorageKey(), map);
-    return map;
-  }
-
-  function cleanupLocalConfirmed(){
-    const map = readJsonStorage(getLocalConfirmedStorageKey());
-    const today = window.getTokyoTodayString();
-    let changed = false;
-
-    Object.keys(map).forEach(key => {
-      if(!key.startsWith(today + "__")){
-        delete map[key];
-        changed = true;
-      }
-    });
-
-    if(changed) writeJsonStorage(getLocalConfirmedStorageKey(), map);
-    return map;
-  }
-
-  function getLocalPendingClassSet(member){
-    const cleanMember = window.normalizeMember(member);
-    const today = window.getTokyoTodayString();
-    const map = cleanupLocalPending();
-    const key = getLocalReceiptKey(cleanMember, today);
-    const arr = Array.isArray(map[key]) ? map[key] : [];
-    return new Set(arr.map(item => normalizeClassName(item.className)));
-  }
-
-  function getLocalConfirmedClassSet(member){
-    const cleanMember = window.normalizeMember(member);
-    const today = window.getTokyoTodayString();
-    const map = cleanupLocalConfirmed();
-    const key = getLocalReceiptKey(cleanMember, today);
-    const arr = Array.isArray(map[key]) ? map[key] : [];
-    return new Set(arr.map(item => normalizeClassName(item)));
-  }
-
-  function addLocalPendingClasses(member, classNames){
-    const cleanMember = window.normalizeMember(member);
-    const today = window.getTokyoTodayString();
-    const map = cleanupLocalPending();
-    const key = getLocalReceiptKey(cleanMember, today);
-    const now = Date.now();
-    const expiresAt = now + Number(window.APP_CONFIG.LOCAL_PENDING_MINUTES || 10) * 60 * 1000;
-
-    const current = Array.isArray(map[key]) ? map[key] : [];
-    const byClass = new Map();
-
-    current.forEach(item => {
-      if(item && item.className && item.expiresAt && item.expiresAt > now){
-        byClass.set(normalizeClassName(item.className), {
-          className: normalizeClassName(item.className),
-          expiresAt: item.expiresAt
-        });
-      }
-    });
-
-    (classNames || []).forEach(cls => {
-      const normalized = normalizeClassName(cls);
-      if(!normalized) return;
-      byClass.set(normalized, {
-        className: normalized,
-        expiresAt
-      });
-    });
-
-    map[key] = Array.from(byClass.values());
-    writeJsonStorage(getLocalPendingStorageKey(), map);
-  }
-
-  function removeLocalPendingClasses(member, classNames){
-    const cleanMember = window.normalizeMember(member);
-    const today = window.getTokyoTodayString();
-    const map = cleanupLocalPending();
-    const key = getLocalReceiptKey(cleanMember, today);
-    const arr = Array.isArray(map[key]) ? map[key] : [];
-    const removeSet = new Set((classNames || []).map(c => normalizeClassName(c)));
-
-    const filtered = arr.filter(item => !removeSet.has(normalizeClassName(item.className)));
-
-    if(filtered.length > 0) map[key] = filtered;
-    else delete map[key];
-
-    writeJsonStorage(getLocalPendingStorageKey(), map);
-  }
-
-  function addLocalConfirmedClasses(member, classNames){
-    const cleanMember = window.normalizeMember(member);
-    const today = window.getTokyoTodayString();
-    const map = cleanupLocalConfirmed();
-    const key = getLocalReceiptKey(cleanMember, today);
-    const current = Array.isArray(map[key]) ? map[key] : [];
-    const byClass = new Map();
-
-    current.forEach(cls => {
-      const normalized = normalizeClassName(cls);
-      if(normalized) byClass.set(normalized, normalized);
-    });
-
-    (classNames || []).forEach(cls => {
-      const normalized = normalizeClassName(cls);
-      if(normalized) byClass.set(normalized, normalized);
-    });
-
-    map[key] = Array.from(byClass.values());
-    writeJsonStorage(getLocalConfirmedStorageKey(), map);
-  }
-
-  function promotePendingToConfirmed(member, classNames){
-    addLocalConfirmedClasses(member, classNames);
-    removeLocalPendingClasses(member, classNames);
-  }
-
-  window.addLocalPendingClasses = addLocalPendingClasses;
-  window.removeLocalPendingClasses = removeLocalPendingClasses;
-  window.addLocalConfirmedClasses = addLocalConfirmedClasses;
-  window.promotePendingToConfirmed = promotePendingToConfirmed;
-
   window.initLiffSafe = async function(){
     try{
       if(typeof liff !== "undefined"){
@@ -464,7 +296,6 @@
     try{
       const res = await fetch(url,{cache:"no-store"});
       const text = await res.text();
-
       const json = parseGvizJson(text);
       const rows = json.table?.rows || [];
 
@@ -616,16 +447,7 @@
   };
 
   window.getTodayDuplicateClassSet = async function(member, forceRefresh = false){
-    const remoteSet = await window.getTodayRemoteDuplicateClassSet(member, forceRefresh);
-    const localPendingSet = getLocalPendingClassSet(member);
-    const localConfirmedSet = getLocalConfirmedClassSet(member);
-    const merged = new Set();
-
-    remoteSet.forEach(v => merged.add(v));
-    localPendingSet.forEach(v => merged.add(v));
-    localConfirmedSet.forEach(v => merged.add(v));
-
-    return merged;
+    return await window.getTodayRemoteDuplicateClassSet(member, forceRefresh);
   };
 
   window.getTodayDuplicateClasses = async function(member, classNames, forceRefresh = false){
@@ -806,9 +628,10 @@
       }
 
       const member = getCurrentMemberForDuplicateCheck();
+      const classesToSubmit = selectedClasses.slice();
 
       if(member){
-        const duplicates = await window.getTodayDuplicateClasses(member, selectedClasses, true);
+        const duplicates = await window.getTodayDuplicateClasses(member, classesToSubmit, true);
 
         if(duplicates.length > 0){
           alert(
@@ -820,12 +643,9 @@
           applyDuplicateButtons(duplicateSet);
           return;
         }
-
-        addLocalPendingClasses(member, selectedClasses);
-        applyDuplicateButtons(new Set(selectedClasses.map(normalizeClassName)));
       }
 
-      await Promise.resolve(onSubmit(selectedClasses.slice()));
+      await Promise.resolve(onSubmit(classesToSubmit));
     };
   };
 
