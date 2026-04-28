@@ -204,10 +204,43 @@
     return s;
   };
 
+  /*
+    【重要：先頭0落ち対策・消さない】
+    normalizeMember() は、表示・フォーム送信用の会員番号をそのまま返す。
+    例：01210018 は 01210018 のまま送信する。
+
+    ただしGoogle Sheets / gvizは、シート側の型推定により
+    01210018 を 1210018 として返すことがある。
+
+    そのため、重複チェックなどの「比較」だけは
+    getMemberCompareKey() で数字のみ会員番号の先頭0を落として比較する。
+
+    これにより、
+      01210018
+      1210018
+    を同一会員として扱う。
+
+    今後 shared.js を修正するときも、
+    isSameMemberId() と getMemberCompareKey() の仕様は変更しないこと。
+  */
+  function getMemberCompareKey(value){
+    const s = window.normalizeMember(value);
+
+    if(!s) return "";
+
+    if(/^\d+$/.test(s)){
+      return s.replace(/^0+/, "") || "0";
+    }
+
+    return s;
+  }
+
   function isSameMemberId(a, b){
-    const aa = window.normalizeMember(a);
-    const bb = window.normalizeMember(b);
+    const aa = getMemberCompareKey(a);
+    const bb = getMemberCompareKey(b);
+
     if(!aa || !bb) return false;
+
     return aa === bb;
   }
 
@@ -403,7 +436,7 @@
   window.getTodayRemoteDuplicateClassSet = async function(member, forceRefresh = false){
     const cleanMember = window.normalizeMember(member);
     const today = window.getTokyoTodayString();
-    const cacheKey = getDuplicateCacheKey(cleanMember, today);
+    const cacheKey = getDuplicateCacheKey(getMemberCompareKey(cleanMember), today);
     const now = Date.now();
     const cacheMs = Number(window.APP_CONFIG.DUPLICATE_CACHE_MS || 0);
     const cached = duplicateCacheMap[cacheKey];
@@ -463,7 +496,7 @@
 
     if(member){
       const cleanMember = window.normalizeMember(member);
-      delete duplicateCacheMap[getDuplicateCacheKey(cleanMember, today)];
+      delete duplicateCacheMap[getDuplicateCacheKey(getMemberCompareKey(cleanMember), today)];
       return;
     }
 
