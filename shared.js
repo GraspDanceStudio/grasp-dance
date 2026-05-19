@@ -9,7 +9,8 @@
     SPREADSHEET_ID: "1z7xSOOjsXyuQn5p9aE3tl5fgzIMkxoLKVnnpTYUTS9k",
     DUPLICATE_GID: "969068048",
     COUNT_GID: "218311726",
-    DUPLICATE_CACHE_MS: 10000
+    DUPLICATE_CACHE_MS: 10000,
+    LOCAL_PENDING_MINUTES: 10
   };
 
   window.DAY_MAP = ["月","火","水","木","金","土","WS"];
@@ -25,6 +26,30 @@
   };
 
   let duplicateCacheMap = {};
+
+  const LOCAL_PENDING_STORAGE_KEY = "dance_accept_pending_duplicates_v1";
+
+  function loadLocalPendingDuplicateMap(){
+    try{
+      const raw = localStorage.getItem(LOCAL_PENDING_STORAGE_KEY);
+      if(!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    }catch(e){
+      console.log("loadLocalPendingDuplicateMap error", e);
+      return {};
+    }
+  }
+
+  function saveLocalPendingDuplicateMap(map){
+    try{
+      localStorage.setItem(LOCAL_PENDING_STORAGE_KEY, JSON.stringify(map || {}));
+    }catch(e){
+      console.log("saveLocalPendingDuplicateMap error", e);
+    }
+  }
+
+  let localPendingDuplicateMap = loadLocalPendingDuplicateMap();
 
   window.getTokyoTodayString = function(){
     const parts = new Intl.DateTimeFormat("en-CA", {
@@ -388,6 +413,58 @@
     return `${date}__${member}`;
   }
 
+  function getLocalPendingDuplicateSet(member){
+    const cleanMember = window.normalizeMember(member);
+    const today = window.getTokyoTodayString();
+    const key = getDuplicateCacheKey(getMemberCompareKey(cleanMember), today);
+    const now = Date.now();
+    const item = localPendingDuplicateMap[key];
+
+    const result = new Set();
+
+    if(!item || !item.classes) return result;
+
+    let changed = false;
+
+    Object.keys(item.classes).forEach(cls => {
+      const expiresAt = item.classes[cls];
+
+      if(expiresAt && expiresAt > now){
+        result.add(cls);
+      }else{
+        delete item.classes[cls];
+        changed = true;
+      }
+    });
+
+    if(changed){
+      saveLocalPendingDuplicateMap(localPendingDuplicateMap);
+    }
+
+    return result;
+  }
+
+  window.addLocalPendingDuplicateClasses = function(member, classNames){
+    const cleanMember = window.normalizeMember(member);
+    const today = window.getTokyoTodayString();
+    const key = getDuplicateCacheKey(getMemberCompareKey(cleanMember), today);
+    const minutes = Number(window.APP_CONFIG.LOCAL_PENDING_MINUTES || 10);
+    const expiresAt = Date.now() + minutes * 60 * 1000;
+
+    if(!cleanMember) return;
+
+    localPendingDuplicateMap[key] = localPendingDuplicateMap[key] || { classes:{} };
+
+    (classNames || []).forEach(className => {
+      const cls = normalizeClassName(className);
+      if(cls){
+        localPendingDuplicateMap[key].classes[cls] = expiresAt;
+      }
+    });
+
+    saveLocalPendingDuplicateMap(localPendingDuplicateMap);
+  };
+
   async function fetchTodayRemoteDuplicateClassSet(member){
     const cleanMember = window.normalizeMember(member);
     const today = window.getTokyoTodayString();
@@ -480,7 +557,14 @@
   };
 
   window.getTodayDuplicateClassSet = async function(member, forceRefresh = false){
-    return await window.getTodayRemoteDuplicateClassSet(member, forceRefresh);
+    const remoteSet = await window.getTodayRemoteDuplicateClassSet(member, forceRefresh);
+    const localSet = getLocalPendingDuplicateSet(member);
+
+    localSet.forEach(cls => {
+      remoteSet.add(cls);
+    });
+
+    return remoteSet;
   };
 
   window.getTodayDuplicateClasses = async function(member, classNames, forceRefresh = false){
