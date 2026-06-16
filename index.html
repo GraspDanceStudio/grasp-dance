@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>受付</title>
 
-<script src="shared.js?v=20260616-1"></script>
+<script src="shared.js?v=20260616-2"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
@@ -115,13 +115,13 @@ h2#title {
 /* クラスボタン */
 .class-btn {
   width: 100%;
-  min-height: 96px;
-  font-size: 28px;
+  min-height: 132px;
+  font-size: 30px;
   line-height: 1.25;
-  padding: 28px 22px;
+  padding: 38px 24px;
   margin: 0;
   text-align: left;
-  border-radius: 18px;
+  border-radius: 20px;
   background: #ffffff;
   color: #111;
   font-weight: 850;
@@ -197,9 +197,12 @@ h2#title {
 
 /* 小さめ端末調整 */
 @media (max-width: 380px) {
-  body {
-    padding: 10px;
+  .class-btn {
+    font-size: 26px;
+    min-height: 118px;
+    padding: 34px 20px;
   }
+}
 
   h2#title {
     font-size: 24px;
