@@ -281,8 +281,8 @@ input::placeholder {
     <div id="memberList" class="member-list"></div>
 
     <div class="note">
-      ※この端末のLINE内に保存されます。<br>
-      機種変更・LINE再ログイン時は、再登録が必要になる場合があります。
+      ※通常はLINEメニューから開くと、前回表示した会員証が自動で表示されます。<br>
+      ※この画面は会員証の切替・追加用です。
     </div>
   </div>
 
@@ -320,7 +320,9 @@ input::placeholder {
 
 <script>
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyDXdx9X52sngmExXxSpn7BbcWRRTLfUvZMsjXsvQa8psm9nD2XBHuAAVv5ovrwVhoy/exec";
+
 const STORAGE_KEY = "grasp_member_cards_v1";
+const LAST_MEMBER_KEY = "grasp_last_member_card_v1";
 
 let checkedMember = null;
 
@@ -333,6 +335,15 @@ function normalizeMemberNumber(value) {
     .replace(/[－ー―]/g, "-")
     .replace(/\s+/g, "")
     .toUpperCase();
+}
+
+function isManageMode() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("manage") === "1";
+  } catch (e) {
+    return false;
+  }
 }
 
 function loadMembers() {
@@ -405,7 +416,7 @@ function renderMembers() {
 
     btn.innerHTML = html;
     btn.onclick = function() {
-      openMemberCard(m.member, m.name);
+      openMemberCard(m.member, m.name, false);
     };
 
     const del = document.createElement("button");
@@ -419,6 +430,32 @@ function renderMembers() {
     row.appendChild(del);
     list.appendChild(row);
   });
+}
+
+function autoOpenSavedMemberIfNeeded() {
+  if (isManageMode()) return;
+
+  const members = loadMembers();
+
+  if (!members.length) return;
+
+  const lastMember = normalizeMemberNumber(localStorage.getItem(LAST_MEMBER_KEY) || "");
+
+  let target = null;
+
+  if (lastMember) {
+    target = members.find(function(m) {
+      return normalizeMemberNumber(m.member) === lastMember;
+    });
+  }
+
+  if (!target) {
+    target = members[0];
+  }
+
+  if (target && target.member) {
+    openMemberCard(target.member, target.name, true);
+  }
 }
 
 function checkMember() {
@@ -436,6 +473,8 @@ function checkMember() {
   showLoading();
 
   const callbackName = "memberLookupCallback_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+
+  const script = document.createElement("script");
 
   const timeoutId = setTimeout(function() {
     cleanupJsonp(callbackName, script);
@@ -462,7 +501,6 @@ function checkMember() {
     showCheckedMember(checkedMember);
   };
 
-  const script = document.createElement("script");
   script.src =
     GAS_URL +
     "?member=" +
@@ -530,9 +568,8 @@ function registerCheckedMember() {
   saveMembers(members);
 
   document.getElementById("memberNumber").value = "";
-  checkedMember = null;
-  hideResult();
-  renderMembers();
+
+  openMemberCard(checkedMember.member, checkedMember.name, true);
 }
 
 function resetCheck() {
@@ -551,19 +588,35 @@ function deleteMember(index) {
   const ok = confirm((target.name || target.member) + " の会員証登録を削除しますか？");
   if (!ok) return;
 
+  const lastMember = normalizeMemberNumber(localStorage.getItem(LAST_MEMBER_KEY) || "");
+
+  if (normalizeMemberNumber(target.member) === lastMember) {
+    localStorage.removeItem(LAST_MEMBER_KEY);
+  }
+
   members.splice(index, 1);
   saveMembers(members);
   renderMembers();
 }
 
-function openMemberCard(member, name) {
+function openMemberCard(member, name, replaceMode) {
+  const cleanMember = normalizeMemberNumber(member);
+
+  if (cleanMember) {
+    localStorage.setItem(LAST_MEMBER_KEY, cleanMember);
+  }
+
   const url =
     "member.html?member=" +
-    encodeURIComponent(member) +
+    encodeURIComponent(cleanMember) +
     "&name=" +
     encodeURIComponent(name || "");
 
-  window.location.href = url;
+  if (replaceMode) {
+    window.location.replace(url);
+  } else {
+    window.location.href = url;
+  }
 }
 
 function escapeHtml(value) {
@@ -576,6 +629,7 @@ function escapeHtml(value) {
 }
 
 renderMembers();
+autoOpenSavedMemberIfNeeded();
 </script>
 
 </body>
