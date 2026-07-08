@@ -1,1 +1,415 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>会員証一覧</title>
 
+<style>
+body {
+  margin: 0;
+  font-family: sans-serif;
+  min-height: 100vh;
+  background:
+    linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)),
+    url('グラスプ.jpg') center/cover no-repeat;
+  color: #fff;
+}
+
+.wrapper {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 18px 12px 32px;
+  box-sizing: border-box;
+}
+
+.card {
+  background: rgba(20, 24, 30, 0.68);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 24px;
+  padding: 24px 20px;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  margin-bottom: 16px;
+}
+
+.title {
+  text-align: center;
+  font-size: 28px;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  text-align: center;
+  font-size: 14px;
+  color: rgba(255,255,255,0.82);
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.member-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.member-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.member-btn {
+  flex: 1;
+  border: none;
+  border-radius: 16px;
+  padding: 16px 14px;
+  text-align: left;
+  background: rgba(255,255,255,0.95);
+  color: #111;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.member-btn .num {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+}
+
+.delete-btn {
+  width: 58px;
+  border: none;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.empty {
+  padding: 18px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.86);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  color: rgba(255,255,255,0.86);
+  margin: 14px 0 6px;
+}
+
+input {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 14px;
+  padding: 15px 14px;
+  font-size: 18px;
+  background: rgba(255,255,255,0.95);
+  color: #111;
+}
+
+input::placeholder {
+  color: #888;
+}
+
+.main-btn {
+  width: 100%;
+  border: none;
+  border-radius: 16px;
+  padding: 16px;
+  margin-top: 18px;
+  background: #fff;
+  color: #111;
+  font-size: 17px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.note {
+  font-size: 13px;
+  color: rgba(255,255,255,0.78);
+  line-height: 1.7;
+  margin-top: 14px;
+}
+
+.small-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.error {
+  display: none;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255,80,80,0.22);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.footer {
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255,255,255,0.72);
+  margin-top: 20px;
+}
+
+@media (max-width: 480px) {
+  .wrapper {
+    padding: 12px 8px 24px;
+  }
+
+  .card {
+    padding: 22px 18px;
+  }
+
+  .title {
+    font-size: 25px;
+  }
+
+  .member-btn {
+    font-size: 15px;
+    padding: 15px 13px;
+  }
+
+  input {
+    font-size: 17px;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <div class="card">
+    <div class="title">会員証</div>
+    <div class="subtitle">
+      登録済みの会員証を選択してください<br>
+      家族分も複数登録できます
+    </div>
+
+    <div class="section-title">登録済み会員証</div>
+    <div id="memberList" class="member-list"></div>
+
+    <div class="note">
+      ※この端末のLINE内に保存されます。<br>
+      機種変更・LINE再ログイン時は、再登録が必要になる場合があります。
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">会員証を追加</div>
+
+    <label for="memberNumber">会員番号</label>
+    <input id="memberNumber" type="text" inputmode="text" placeholder="例：0000001">
+
+    <label for="memberName">氏名</label>
+    <input id="memberName" type="text" placeholder="例：山田 花子">
+
+    <button class="main-btn" onclick="addMember()">登録する</button>
+
+    <div id="errorBox" class="error"></div>
+
+    <div class="note">
+      登録後、上の一覧から名前をタップすると会員証が表示されます。
+    </div>
+  </div>
+
+  <div class="footer">
+    GRASP＆K×G DANCE STUDIO
+  </div>
+
+</div>
+
+<script>
+const STORAGE_KEY = "grasp_member_cards_v1";
+
+function normalizeMemberNumber(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(s) {
+      return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+    })
+    .replace(/\s+/g, "")
+    .toUpperCase();
+}
+
+function normalizeName(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function loadMembers() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveMembers(members) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(members));
+}
+
+function showError(message) {
+  const box = document.getElementById("errorBox");
+  box.textContent = message;
+  box.style.display = "block";
+}
+
+function clearError() {
+  const box = document.getElementById("errorBox");
+  box.textContent = "";
+  box.style.display = "none";
+}
+
+function renderMembers() {
+  const list = document.getElementById("memberList");
+  const members = loadMembers();
+
+  list.innerHTML = "";
+
+  if (members.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.innerHTML = "まだ会員証が登録されていません。<br>下のフォームから会員番号と氏名を登録してください。";
+    list.appendChild(empty);
+    return;
+  }
+
+  members.forEach(function(m, index) {
+    const row = document.createElement("div");
+    row.className = "member-row";
+
+    const btn = document.createElement("button");
+    btn.className = "member-btn";
+    btn.innerHTML =
+      escapeHtml(m.name || "名前未登録") +
+      '<span class="num">' + escapeHtml(m.member) + '</span>';
+    btn.onclick = function() {
+      openMemberCard(m.member, m.name);
+    };
+
+    const del = document.createElement("button");
+    del.className = "delete-btn";
+    del.textContent = "削除";
+    del.onclick = function() {
+      deleteMember(index);
+    };
+
+    row.appendChild(btn);
+    row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+function addMember() {
+  clearError();
+
+  const member = normalizeMemberNumber(document.getElementById("memberNumber").value);
+  const name = normalizeName(document.getElementById("memberName").value);
+
+  if (!member) {
+    showError("会員番号を入力してください。");
+    return;
+  }
+
+  if (!name) {
+    showError("氏名を入力してください。");
+    return;
+  }
+
+  const members = loadMembers();
+
+  const exists = members.some(function(m) {
+    return m.member === member;
+  });
+
+  if (exists) {
+    showError("この会員番号はすでに登録されています。");
+    return;
+  }
+
+  members.push({
+    member: member,
+    name: name,
+    createdAt: new Date().toISOString()
+  });
+
+  saveMembers(members);
+
+  document.getElementById("memberNumber").value = "";
+  document.getElementById("memberName").value = "";
+
+  renderMembers();
+}
+
+function deleteMember(index) {
+  const members = loadMembers();
+  const target = members[index];
+
+  if (!target) return;
+
+  const ok = confirm((target.name || target.member) + " の会員証登録を削除しますか？");
+  if (!ok) return;
+
+  members.splice(index, 1);
+  saveMembers(members);
+  renderMembers();
+}
+
+function openMemberCard(member, name) {
+  const url =
+    "member.html?member=" +
+    encodeURIComponent(member) +
+    "&name=" +
+    encodeURIComponent(name || "");
+
+  window.location.href = url;
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+renderMembers();
+</script>
+
+</body>
+</html>
