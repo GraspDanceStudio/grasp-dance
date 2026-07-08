@@ -80,6 +80,14 @@ body {
   cursor: pointer;
 }
 
+.member-btn .kana {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+}
+
 .member-btn .num {
   display: block;
   margin-top: 4px;
@@ -143,6 +151,24 @@ input::placeholder {
   cursor: pointer;
 }
 
+.main-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.sub-btn {
+  width: 100%;
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 16px;
+  padding: 15px;
+  margin-top: 12px;
+  background: rgba(255,255,255,0.16);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
 .note {
   font-size: 13px;
   color: rgba(255,255,255,0.78);
@@ -150,15 +176,36 @@ input::placeholder {
   margin-top: 14px;
 }
 
-.small-btn {
-  border: none;
-  border-radius: 999px;
-  padding: 10px 14px;
-  background: rgba(255,255,255,0.18);
-  color: #fff;
+.result-box {
+  display: none;
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.18);
+}
+
+.result-label {
   font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
+  color: rgba(255,255,255,0.78);
+  margin-bottom: 8px;
+}
+
+.result-name {
+  font-size: 24px;
+  font-weight: 900;
+  margin-bottom: 6px;
+}
+
+.result-kana {
+  font-size: 14px;
+  color: rgba(255,255,255,0.82);
+  margin-bottom: 8px;
+}
+
+.result-number {
+  font-size: 14px;
+  color: rgba(255,255,255,0.82);
 }
 
 .error {
@@ -168,6 +215,17 @@ input::placeholder {
   border-radius: 14px;
   background: rgba(255,80,80,0.22);
   color: #fff;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.loading {
+  display: none;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.9);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -200,6 +258,10 @@ input::placeholder {
   input {
     font-size: 17px;
   }
+
+  .result-name {
+    font-size: 22px;
+  }
 }
 </style>
 </head>
@@ -230,15 +292,23 @@ input::placeholder {
     <label for="memberNumber">会員番号</label>
     <input id="memberNumber" type="text" inputmode="text" placeholder="例：0000001">
 
-    <label for="memberName">氏名</label>
-    <input id="memberName" type="text" placeholder="例：山田 花子">
+    <button class="main-btn" onclick="checkMember()">確認する</button>
 
-    <button class="main-btn" onclick="addMember()">登録する</button>
-
+    <div id="loadingBox" class="loading">会員番号を確認しています...</div>
     <div id="errorBox" class="error"></div>
 
+    <div id="resultBox" class="result-box">
+      <div class="result-label">以下の会員証を登録しますか？</div>
+      <div id="resultName" class="result-name"></div>
+      <div id="resultKana" class="result-kana"></div>
+      <div id="resultNumber" class="result-number"></div>
+
+      <button class="main-btn" onclick="registerCheckedMember()">この会員証を登録する</button>
+      <button class="sub-btn" onclick="resetCheck()">番号を入力し直す</button>
+    </div>
+
     <div class="note">
-      登録後、上の一覧から名前をタップすると会員証が表示されます。
+      会員番号を確認後、スプレッドシート上の正式な氏名を表示します。
     </div>
   </div>
 
@@ -249,7 +319,10 @@ input::placeholder {
 </div>
 
 <script>
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyDXdx9X52sngmExXxSpn7BbcWRRTLfUvZMsjXsvQa8psm9nD2XBHuAAVv5ovrwVhoy/exec";
 const STORAGE_KEY = "grasp_member_cards_v1";
+
+let checkedMember = null;
 
 function normalizeMemberNumber(value) {
   return String(value || "")
@@ -257,14 +330,9 @@ function normalizeMemberNumber(value) {
     .replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(s) {
       return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
     })
+    .replace(/[－ー―]/g, "-")
     .replace(/\s+/g, "")
     .toUpperCase();
-}
-
-function normalizeName(value) {
-  return String(value || "")
-    .trim()
-    .replace(/\s+/g, " ");
 }
 
 function loadMembers() {
@@ -294,6 +362,18 @@ function clearError() {
   box.style.display = "none";
 }
 
+function showLoading() {
+  document.getElementById("loadingBox").style.display = "block";
+}
+
+function hideLoading() {
+  document.getElementById("loadingBox").style.display = "none";
+}
+
+function hideResult() {
+  document.getElementById("resultBox").style.display = "none";
+}
+
 function renderMembers() {
   const list = document.getElementById("memberList");
   const members = loadMembers();
@@ -303,7 +383,7 @@ function renderMembers() {
   if (members.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.innerHTML = "まだ会員証が登録されていません。<br>下のフォームから会員番号と氏名を登録してください。";
+    empty.innerHTML = "まだ会員証が登録されていません。<br>下のフォームから会員番号を登録してください。";
     list.appendChild(empty);
     return;
   }
@@ -314,9 +394,16 @@ function renderMembers() {
 
     const btn = document.createElement("button");
     btn.className = "member-btn";
-    btn.innerHTML =
-      escapeHtml(m.name || "名前未登録") +
-      '<span class="num">' + escapeHtml(m.member) + '</span>';
+
+    let html = escapeHtml(m.name || "名前未登録");
+
+    if (m.kana) {
+      html += '<span class="kana">' + escapeHtml(m.kana) + '</span>';
+    }
+
+    html += '<span class="num">' + escapeHtml(m.member) + '</span>';
+
+    btn.innerHTML = html;
     btn.onclick = function() {
       openMemberCard(m.member, m.name);
     };
@@ -334,45 +421,125 @@ function renderMembers() {
   });
 }
 
-function addMember() {
+function checkMember() {
   clearError();
+  hideResult();
+  checkedMember = null;
 
   const member = normalizeMemberNumber(document.getElementById("memberNumber").value);
-  const name = normalizeName(document.getElementById("memberName").value);
 
   if (!member) {
     showError("会員番号を入力してください。");
     return;
   }
 
-  if (!name) {
-    showError("氏名を入力してください。");
+  showLoading();
+
+  const callbackName = "memberLookupCallback_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+
+  const timeoutId = setTimeout(function() {
+    cleanupJsonp(callbackName, script);
+    hideLoading();
+    showError("確認に時間がかかっています。通信状況をご確認ください。");
+  }, 10000);
+
+  window[callbackName] = function(result) {
+    clearTimeout(timeoutId);
+    cleanupJsonp(callbackName, script);
+    hideLoading();
+
+    if (!result || !result.ok) {
+      showError((result && result.message) ? result.message : "会員番号が見つかりません。");
+      return;
+    }
+
+    checkedMember = {
+      member: normalizeMemberNumber(result.member),
+      name: result.name || "",
+      kana: result.kana || ""
+    };
+
+    showCheckedMember(checkedMember);
+  };
+
+  const script = document.createElement("script");
+  script.src =
+    GAS_URL +
+    "?member=" +
+    encodeURIComponent(member) +
+    "&callback=" +
+    encodeURIComponent(callbackName) +
+    "&t=" +
+    Date.now();
+
+  script.onerror = function() {
+    clearTimeout(timeoutId);
+    cleanupJsonp(callbackName, script);
+    hideLoading();
+    showError("会員番号の確認に失敗しました。時間をおいて再度お試しください。");
+  };
+
+  document.body.appendChild(script);
+}
+
+function cleanupJsonp(callbackName, script) {
+  try {
+    delete window[callbackName];
+  } catch (e) {
+    window[callbackName] = undefined;
+  }
+
+  if (script && script.parentNode) {
+    script.parentNode.removeChild(script);
+  }
+}
+
+function showCheckedMember(memberData) {
+  document.getElementById("resultName").textContent = memberData.name || "名前未登録";
+  document.getElementById("resultKana").textContent = memberData.kana || "";
+  document.getElementById("resultNumber").textContent = memberData.member || "";
+  document.getElementById("resultBox").style.display = "block";
+}
+
+function registerCheckedMember() {
+  clearError();
+
+  if (!checkedMember || !checkedMember.member) {
+    showError("先に会員番号を確認してください。");
     return;
   }
 
   const members = loadMembers();
 
   const exists = members.some(function(m) {
-    return m.member === member;
+    return normalizeMemberNumber(m.member) === checkedMember.member;
   });
 
   if (exists) {
-    showError("この会員番号はすでに登録されています。");
+    showError("この会員証はすでに登録されています。");
     return;
   }
 
   members.push({
-    member: member,
-    name: name,
+    member: checkedMember.member,
+    name: checkedMember.name,
+    kana: checkedMember.kana,
     createdAt: new Date().toISOString()
   });
 
   saveMembers(members);
 
   document.getElementById("memberNumber").value = "";
-  document.getElementById("memberName").value = "";
-
+  checkedMember = null;
+  hideResult();
   renderMembers();
+}
+
+function resetCheck() {
+  checkedMember = null;
+  clearError();
+  hideResult();
+  document.getElementById("memberNumber").focus();
 }
 
 function deleteMember(index) {
