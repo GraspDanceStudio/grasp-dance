@@ -1,258 +1,46 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>会員証</title>
-
-<script src="shared.js?v=20260708-member-1"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-
-<style>
-body {
-  margin: 0;
-  font-family: sans-serif;
-  min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-
-  background:
-    linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)),
-    url('グラスプ.jpg') center/cover no-repeat;
-}
-
-/* 全体 */
-.wrapper {
-  width: 100%;
-  max-width: 560px;
-  padding: 10px;
-}
-
-/* カード共通 */
-.card {
-  background: rgba(20, 24, 30, 0.65);
-  border: 1px solid rgba(255,255,255,0.18);
-  border-radius: 24px;
-  padding: 32px 28px;
-  box-shadow: 0 18px 40px rgba(0,0,0,0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: #fff;
-}
-
-/* 上カード */
-.top-card {
-  margin-bottom: 16px;
-  text-align: center;
-}
-
-.studio {
-  font-size: 16px;
-  color: rgba(255,255,255,0.8);
-  margin-bottom: 12px;
-  line-height: 1.6;
-}
-
-.name {
-  font-size: 36px;
-  font-weight: 900;
-  margin-bottom: 10px;
-}
-
-.number {
-  font-size: 16px;
-  color: rgba(255,255,255,0.85);
-}
-
-/* 受講数カード */
-.count-card {
-  margin-bottom: 16px;
-  text-align: center;
-  padding: 22px 24px;
-}
-
-.count-title {
-  font-size: 15px;
-  color: rgba(255,255,255,0.82);
-  margin-bottom: 8px;
-}
-
-.count-main {
-  font-size: 30px;
-  font-weight: 900;
-  margin-bottom: 6px;
-}
-
-.count-sub {
-  font-size: 14px;
-  color: rgba(255,255,255,0.82);
-}
-
-.count-error {
-  font-size: 14px;
-  color: rgba(255,220,220,0.95);
-}
-
-/* QRカード */
-.qr-card {
-  text-align: center;
-}
-
-#qrcode {
-  margin-bottom: 16px;
-}
-
-#qrcode canvas {
-  width: 360px !important;
-  height: auto !important;
-  background: #fff;
-  padding: 12px;
-  border-radius: 12px;
-}
-
-/* 補足 */
-.note {
-  font-size: 13px;
-  color: rgba(255,255,255,0.85);
-  line-height: 1.6;
-  margin-bottom: 18px;
-}
-
-/* ボタン */
-.switch-btn {
-  width: 100%;
-  border: none;
-  border-radius: 16px;
-  padding: 16px;
-  background: rgba(255,255,255,0.95);
-  color: #111;
-  font-size: 16px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-/* スマホ */
 @media (max-width: 480px) {
   .wrapper {
-    padding: 6px;
+    padding: 8px;
   }
 
   .card {
-    padding: 26px 20px;
+    padding: 32px 22px;
+  }
+
+  .studio {
+    font-size: 17px;
   }
 
   .name {
-    font-size: 30px;
+    font-size: 34px;
+  }
+
+  .number {
+    font-size: 18px;
+  }
+
+  .count-title {
+    font-size: 18px;
   }
 
   .count-main {
+    font-size: 34px;
+  }
+
+  .count-sub {
+    font-size: 16px;
+  }
+
+  .note {
+    font-size: 15px;
+  }
+
+  .switch-btn {
     font-size: 28px;
+    padding: 20px;
   }
 
   #qrcode canvas {
-    width: 300px !important;
+    width: 320px !important;
   }
 }
-</style>
-</head>
-
-<body>
-
-<div class="wrapper">
-
-  <div class="card top-card">
-    <div class="studio">
-      GRASP＆K×G DANCE STUDIO<br>
-      members card
-    </div>
-
-    <div id="memberName" class="name"></div>
-    <div id="memberNumber" class="number"></div>
-  </div>
-
-  <div class="card count-card">
-    <div class="count-title">今月の受講数</div>
-    <div id="countMain" class="count-main">照会中…</div>
-    <div id="countSub" class="count-sub"></div>
-  </div>
-
-  <div class="card qr-card">
-    <div id="qrcode"></div>
-
-    <div class="note">
-      受付時にQRコードをご提示ください<br>
-      スクリーンショットでも利用可能です
-    </div>
-
-    <button class="switch-btn" onclick="switchMember()">
-      会員切替・追加
-    </button>
-  </div>
-
-</div>
-
-<script>
-const params = new URLSearchParams(window.location.search);
-
-const member = params.get("member") || "";
-const name = decodeURIComponent(params.get("name") || "");
-
-// 表示
-document.getElementById("memberName").textContent = name || "GUEST";
-document.getElementById("memberNumber").textContent = member;
-
-// QR（LIFF）
-const qrText =
-  "https://liff.line.me/2008912129-TQRCpL9d?member=" +
-  encodeURIComponent(member);
-
-// QR生成
-QRCode.toCanvas(qrText, { width: 400 }, function (err, canvas) {
-  if (!err) {
-    document.getElementById("qrcode").appendChild(canvas);
-  }
-});
-
-// 今月受講数表示
-loadCount();
-
-// 会員切替
-function switchMember() {
-  location.href = "cards.html?manage=1";
-}
-
-async function loadCount() {
-  const countMain = document.getElementById("countMain");
-  const countSub = document.getElementById("countSub");
-
-  if (!member) {
-    countMain.textContent = "-";
-    countSub.textContent = "会員番号が取得できませんでした";
-    return;
-  }
-
-  try {
-    if (typeof window.fetchCount !== "function") {
-      throw new Error("fetchCount is not available");
-    }
-
-    const data = await window.fetchCount(member);
-
-    countMain.textContent = String(data.count || 0) + " 回";
-
-    if (data.last) {
-      countSub.textContent = "最終受講：" + data.last;
-    } else {
-      countSub.textContent = "今月の受講記録はまだありません";
-    }
-
-  } catch (e) {
-    console.log("loadCount error", e);
-    countMain.textContent = "-";
-    countSub.innerHTML = "<span class='count-error'>受講数を取得できませんでした</span>";
-  }
-}
-</script>
-
-</body>
-</html>
