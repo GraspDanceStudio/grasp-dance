@@ -60,6 +60,34 @@ body {
   color: rgba(255,255,255,0.85);
 }
 
+.count-card {
+  margin-bottom: 18px;
+  text-align: center;
+  padding: 30px 28px;
+}
+
+.count-title {
+  font-size: 20px;
+  color: rgba(255,255,255,0.82);
+  margin-bottom: 10px;
+}
+
+.count-main {
+  font-size: 42px;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.count-sub {
+  font-size: 18px;
+  color: rgba(255,255,255,0.82);
+}
+
+.count-error {
+  font-size: 18px;
+  color: rgba(255,220,220,0.95);
+}
+
 .qr-card {
   text-align: center;
 }
@@ -116,6 +144,22 @@ body {
     font-size: 18px;
   }
 
+  .count-card {
+    padding: 28px 22px;
+  }
+
+  .count-title {
+    font-size: 18px;
+  }
+
+  .count-main {
+    font-size: 34px;
+  }
+
+  .count-sub {
+    font-size: 16px;
+  }
+
   .note {
     font-size: 15px;
   }
@@ -146,6 +190,12 @@ body {
     <div id="memberNumber" class="number"></div>
   </div>
 
+  <div class="card count-card">
+    <div class="count-title">今月の受講数</div>
+    <div id="countMain" class="count-main">照会中…</div>
+    <div id="countSub" class="count-sub"></div>
+  </div>
+
   <div class="card qr-card">
     <div id="qrcode"></div>
 
@@ -162,9 +212,11 @@ body {
 </div>
 
 <script>
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyDXdx9X52sngmExXxSpn7BbcWRRTLfUvZMsjXsvQa8psm9nD2XBHuAAVv5ovrwVhoy/exec";
+
 const params = new URLSearchParams(window.location.search);
 
-const member = params.get("member") || "";
+const member = normalizeMemberNumber(params.get("member") || "");
 const name = params.get("name") || "";
 
 document.getElementById("memberName").textContent = name || "GUEST";
@@ -180,8 +232,95 @@ QRCode.toCanvas(qrText, { width: 400 }, function (err, canvas) {
   }
 });
 
+loadCount();
+
+function normalizeMemberNumber(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(s) {
+      return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+    })
+    .replace(/[－ー―]/g, "-")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+}
+
 function switchMember() {
   location.href = "cards.html?manage=1";
+}
+
+function loadCount() {
+  const countMain = document.getElementById("countMain");
+  const countSub = document.getElementById("countSub");
+
+  if (!member) {
+    countMain.textContent = "-";
+    countSub.textContent = "会員番号が取得できませんでした";
+    return;
+  }
+
+  const callbackName =
+    "lessonCountCallback_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+
+  const script = document.createElement("script");
+
+  const timeoutId = setTimeout(function() {
+    cleanupJsonp(callbackName, script);
+    countMain.textContent = "-";
+    countSub.innerHTML = "<span class='count-error'>受講数を取得できませんでした</span>";
+  }, 10000);
+
+  window[callbackName] = function(result) {
+    clearTimeout(timeoutId);
+    cleanupJsonp(callbackName, script);
+
+    if (!result || !result.ok || typeof result.count === "undefined") {
+      countMain.textContent = "-";
+      countSub.innerHTML = "<span class='count-error'>受講数を取得できませんでした</span>";
+      return;
+    }
+
+    countMain.textContent = String(result.count || 0) + " 回";
+
+    if (result.lastDate) {
+      countSub.textContent = "最終受講：" + result.lastDate;
+    } else if (result.last) {
+      countSub.textContent = "最終受講：" + result.last;
+    } else {
+      countSub.textContent = "今月の受講記録はまだありません";
+    }
+  };
+
+  script.src =
+    GAS_URL +
+    "?action=count" +
+    "&member=" +
+    encodeURIComponent(member) +
+    "&callback=" +
+    encodeURIComponent(callbackName) +
+    "&t=" +
+    Date.now();
+
+  script.onerror = function() {
+    clearTimeout(timeoutId);
+    cleanupJsonp(callbackName, script);
+    countMain.textContent = "-";
+    countSub.innerHTML = "<span class='count-error'>受講数を取得できませんでした</span>";
+  };
+
+  document.body.appendChild(script);
+}
+
+function cleanupJsonp(callbackName, script) {
+  try {
+    delete window[callbackName];
+  } catch (e) {
+    window[callbackName] = undefined;
+  }
+
+  if (script && script.parentNode) {
+    script.parentNode.removeChild(script);
+  }
 }
 </script>
 
