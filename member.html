@@ -2,330 +2,184 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>会員証一覧</title>
+<title>会員証</title>
+
+<script src="shared.js?v=20260708-member-big-1"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 
 <style>
 body {
   margin: 0;
   font-family: sans-serif;
   min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
   background:
-    linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)),
+    linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)),
     url('グラスプ.jpg') center/cover no-repeat;
-  color: #fff;
 }
 
+/* 全体 */
 .wrapper {
   width: 100%;
   max-width: 640px;
-  margin: 0 auto;
-  padding: 22px 14px 36px;
-  box-sizing: border-box;
+  padding: 14px;
 }
 
+/* カード共通 */
 .card {
-  background: rgba(20, 24, 30, 0.68);
+  background: rgba(20, 24, 30, 0.65);
   border: 1px solid rgba(255,255,255,0.18);
   border-radius: 28px;
-  padding: 32px 26px;
-  box-shadow: 0 18px 40px rgba(0,0,0,0.55);
+  padding: 42px 34px;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.6);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  color: #fff;
+}
+
+/* 上カード */
+.top-card {
+  margin-bottom: 18px;
+  text-align: center;
+}
+
+.studio {
+  font-size: 20px;
+  color: rgba(255,255,255,0.8);
+  margin-bottom: 16px;
+  line-height: 1.6;
+}
+
+.name {
+  font-size: 44px;
+  font-weight: 900;
+  margin-bottom: 14px;
+}
+
+.number {
+  font-size: 22px;
+  color: rgba(255,255,255,0.85);
+}
+
+/* 受講数カード */
+.count-card {
+  margin-bottom: 18px;
+  text-align: center;
+  padding: 30px 28px;
+}
+
+.count-title {
+  font-size: 20px;
+  color: rgba(255,255,255,0.82);
+  margin-bottom: 10px;
+}
+
+.count-main {
+  font-size: 42px;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.count-sub {
+  font-size: 18px;
+  color: rgba(255,255,255,0.82);
+}
+
+.count-error {
+  font-size: 18px;
+  color: rgba(255,220,220,0.95);
+}
+
+/* QRカード */
+.qr-card {
+  text-align: center;
+}
+
+#qrcode {
   margin-bottom: 18px;
 }
 
-.title {
-  text-align: center;
-  font-size: 36px;
-  font-weight: 900;
-  margin-bottom: 12px;
+#qrcode canvas {
+  width: 400px !important;
+  height: auto !important;
+  background: #fff;
+  padding: 14px;
+  border-radius: 14px;
 }
 
-.subtitle {
-  text-align: center;
-  font-size: 18px;
-  color: rgba(255,255,255,0.82);
+/* 補足 */
+.note {
+  font-size: 17px;
+  color: rgba(255,255,255,0.85);
   line-height: 1.7;
   margin-bottom: 24px;
 }
 
-.section-title {
-  font-size: 24px;
-  font-weight: 800;
-  margin-bottom: 16px;
-}
-
-.member-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.member-row {
-  display: flex;
-  gap: 10px;
-  align-items: stretch;
-}
-
-.member-btn {
-  flex: 1;
-  border: none;
-  border-radius: 20px;
-  padding: 24px 18px;
-  text-align: left;
-  background: rgba(255,255,255,0.95);
-  color: #111;
-  font-size: 30px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.member-btn .kana {
-  display: block;
-  margin-top: 6px;
-  font-size: 18px;
-  font-weight: 700;
-  color: #666;
-}
-
-.member-btn .num {
-  display: block;
-  margin-top: 6px;
-  font-size: 20px;
-  font-weight: 700;
-  color: #555;
-}
-
-.delete-btn {
-  width: 86px;
-  border: none;
-  border-radius: 20px;
-  background: rgba(255,255,255,0.18);
-  color: #fff;
-  font-size: 20px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.empty {
-  padding: 22px;
-  border-radius: 18px;
-  background: rgba(255,255,255,0.12);
-  color: rgba(255,255,255,0.86);
-  font-size: 18px;
-  line-height: 1.7;
-}
-
-label {
-  display: block;
-  font-size: 18px;
-  color: rgba(255,255,255,0.86);
-  margin: 18px 0 8px;
-}
-
-input {
-  width: 100%;
-  box-sizing: border-box;
-  border: none;
-  border-radius: 18px;
-  padding: 20px 16px;
-  font-size: 26px;
-  background: rgba(255,255,255,0.95);
-  color: #111;
-}
-
-input::placeholder {
-  color: #888;
-}
-
-.main-btn {
+/* ボタン */
+.switch-btn {
   width: 100%;
   border: none;
   border-radius: 20px;
   padding: 24px;
-  margin-top: 22px;
-  background: #fff;
+  background: rgba(255,255,255,0.95);
   color: #111;
   font-size: 34px;
   font-weight: 900;
   cursor: pointer;
 }
 
-.main-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.sub-btn {
-  width: 100%;
-  border: 1px solid rgba(255,255,255,0.35);
-  border-radius: 20px;
-  padding: 22px;
-  margin-top: 14px;
-  background: rgba(255,255,255,0.16);
-  color: #fff;
-  font-size: 28px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.note {
-  font-size: 17px;
-  color: rgba(255,255,255,0.78);
-  line-height: 1.7;
-  margin-top: 16px;
-}
-
-.result-box {
-  display: none;
-  margin-top: 18px;
-  padding: 22px;
-  border-radius: 20px;
-  background: rgba(255,255,255,0.14);
-  border: 1px solid rgba(255,255,255,0.18);
-}
-
-.result-label {
-  font-size: 17px;
-  color: rgba(255,255,255,0.78);
-  margin-bottom: 12px;
-}
-
-.result-name {
-  font-size: 32px;
-  font-weight: 900;
-  margin-bottom: 8px;
-}
-
-.result-kana {
-  font-size: 18px;
-  color: rgba(255,255,255,0.82);
-  margin-bottom: 10px;
-}
-
-.result-number {
-  font-size: 20px;
-  color: rgba(255,255,255,0.82);
-}
-
-.error {
-  display: none;
-  margin-top: 14px;
-  padding: 16px;
-  border-radius: 16px;
-  background: rgba(255,80,80,0.22);
-  color: #fff;
-  font-size: 18px;
-  line-height: 1.7;
-}
-
-.loading {
-  display: none;
-  margin-top: 14px;
-  padding: 16px;
-  border-radius: 16px;
-  background: rgba(255,255,255,0.14);
-  color: rgba(255,255,255,0.9);
-  font-size: 18px;
-  line-height: 1.7;
-}
-
-.footer {
-  text-align: center;
-  font-size: 15px;
-  color: rgba(255,255,255,0.72);
-  margin-top: 22px;
-}
-
+/* スマホ */
 @media (max-width: 480px) {
   .wrapper {
-    padding: 12px 8px 24px;
+    padding: 8px;
   }
 
   .card {
-    padding: 26px 20px;
+    padding: 32px 22px;
   }
 
-  .title {
-    font-size: 30px;
-  }
-
-  .subtitle {
-    font-size: 16px;
-  }
-
-  .section-title {
-    font-size: 21px;
-  }
-
-  .member-btn {
-    font-size: 24px;
-    padding: 22px 16px;
-  }
-
-  .member-btn .kana {
-    font-size: 15px;
-  }
-
-  .member-btn .num {
+  .studio {
     font-size: 17px;
   }
 
-  .delete-btn {
-    width: 74px;
-    font-size: 17px;
+  .name {
+    font-size: 34px;
   }
 
-  .empty {
+  .number {
+    font-size: 18px;
+  }
+
+  .count-card {
+    padding: 28px 22px;
+  }
+
+  .count-title {
+    font-size: 18px;
+  }
+
+  .count-main {
+    font-size: 34px;
+  }
+
+  .count-sub {
     font-size: 16px;
-  }
-
-  label {
-    font-size: 16px;
-  }
-
-  input {
-    font-size: 22px;
-    padding: 18px 15px;
-  }
-
-  .main-btn {
-    font-size: 28px;
-    padding: 22px;
-  }
-
-  .sub-btn {
-    font-size: 24px;
-    padding: 20px;
   }
 
   .note {
     font-size: 15px;
   }
 
-  .result-label {
-    font-size: 15px;
-  }
-
-  .result-name {
+  .switch-btn {
     font-size: 28px;
+    padding: 22px;
   }
 
-  .result-kana {
-    font-size: 16px;
-  }
-
-  .result-number {
-    font-size: 18px;
-  }
-
-  .error,
-  .loading {
-    font-size: 16px;
-  }
-
-  .footer {
-    font-size: 13px;
+  #qrcode canvas {
+    width: 320px !important;
   }
 }
 </style>
@@ -335,366 +189,98 @@ input::placeholder {
 
 <div class="wrapper">
 
-  <div class="card">
-    <div class="title">会員証</div>
-    <div class="subtitle">
-      登録済みの会員証を選択してください<br>
-      家族分も複数登録できます
+  <div class="card top-card">
+    <div class="studio">
+      GRASP＆K×G DANCE STUDIO<br>
+      members card
     </div>
 
-    <div class="section-title">登録済み会員証</div>
-    <div id="memberList" class="member-list"></div>
-
-    <div class="note">
-      ※通常はLINEメニューから開くと、前回表示した会員証が自動で表示されます。<br>
-      ※この画面は会員証の切替・追加用です。
-    </div>
+    <div id="memberName" class="name"></div>
+    <div id="memberNumber" class="number"></div>
   </div>
 
-  <div class="card">
-    <div class="section-title">会員証を追加</div>
-
-    <label for="memberNumber">会員番号</label>
-    <input id="memberNumber" type="text" inputmode="text" placeholder="例：0000001">
-
-    <button class="main-btn" onclick="checkMember()">確認する</button>
-
-    <div id="loadingBox" class="loading">会員番号を確認しています...</div>
-    <div id="errorBox" class="error"></div>
-
-    <div id="resultBox" class="result-box">
-      <div class="result-label">以下の会員証を登録しますか？</div>
-      <div id="resultName" class="result-name"></div>
-      <div id="resultKana" class="result-kana"></div>
-      <div id="resultNumber" class="result-number"></div>
-
-      <button class="main-btn" onclick="registerCheckedMember()">この会員証を登録する</button>
-      <button class="sub-btn" onclick="resetCheck()">番号を入力し直す</button>
-    </div>
-
-    <div class="note">
-      会員番号を確認後、会員氏名を表示します。
-    </div>
+  <div class="card count-card">
+    <div class="count-title">今月の受講数</div>
+    <div id="countMain" class="count-main">照会中…</div>
+    <div id="countSub" class="count-sub"></div>
   </div>
 
-  <div class="footer">
-    GRASP＆K×G DANCE STUDIO
+  <div class="card qr-card">
+    <div id="qrcode"></div>
+
+    <div class="note">
+      受付時にQRコードをご提示ください<br>
+      スクリーンショットでも利用可能です
+    </div>
+
+    <button class="switch-btn" onclick="switchMember()">
+      会員切替・追加
+    </button>
   </div>
 
 </div>
 
 <script>
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyDXdx9X52sngmExXxSpn7BbcWRRTLfUvZMsjXsvQa8psm9nD2XBHuAAVv5ovrwVhoy/exec";
+const params = new URLSearchParams(window.location.search);
 
-const STORAGE_KEY = "grasp_member_cards_v1";
-const LAST_MEMBER_KEY = "grasp_last_member_card_v1";
+const member = params.get("member") || "";
+const name = params.get("name") || "";
 
-let checkedMember = null;
+// 表示
+document.getElementById("memberName").textContent = name || "GUEST";
+document.getElementById("memberNumber").textContent = member;
 
-function normalizeMemberNumber(value) {
-  return String(value || "")
-    .trim()
-    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(s) {
-      return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
-    })
-    .replace(/[－ー―]/g, "-")
-    .replace(/\s+/g, "")
-    .toUpperCase();
-}
+// QR（LIFF）
+const qrText =
+  "https://liff.line.me/2008912129-TQRCpL9d?member=" +
+  encodeURIComponent(member);
 
-function isManageMode() {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("manage") === "1";
-  } catch (e) {
-    return false;
+// QR生成
+QRCode.toCanvas(qrText, { width: 400 }, function (err, canvas) {
+  if (!err) {
+    document.getElementById("qrcode").appendChild(canvas);
   }
+});
+
+// 今月受講数表示
+loadCount();
+
+// 会員切替
+function switchMember() {
+  location.href = "cards.html?manage=1";
 }
 
-function loadMembers() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const data = JSON.parse(raw);
-    return Array.isArray(data) ? data : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-function saveMembers(members) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(members));
-}
-
-function showError(message) {
-  const box = document.getElementById("errorBox");
-  box.textContent = message;
-  box.style.display = "block";
-}
-
-function clearError() {
-  const box = document.getElementById("errorBox");
-  box.textContent = "";
-  box.style.display = "none";
-}
-
-function showLoading() {
-  document.getElementById("loadingBox").style.display = "block";
-}
-
-function hideLoading() {
-  document.getElementById("loadingBox").style.display = "none";
-}
-
-function hideResult() {
-  document.getElementById("resultBox").style.display = "none";
-}
-
-function renderMembers() {
-  const list = document.getElementById("memberList");
-  const members = loadMembers();
-
-  list.innerHTML = "";
-
-  if (members.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.innerHTML = "まだ会員証が登録されていません。<br>下のフォームから会員番号を登録してください。";
-    list.appendChild(empty);
-    return;
-  }
-
-  members.forEach(function(m, index) {
-    const row = document.createElement("div");
-    row.className = "member-row";
-
-    const btn = document.createElement("button");
-    btn.className = "member-btn";
-
-    let html = escapeHtml(m.name || "名前未登録");
-
-    if (m.kana) {
-      html += '<span class="kana">' + escapeHtml(m.kana) + '</span>';
-    }
-
-    html += '<span class="num">' + escapeHtml(m.member) + '</span>';
-
-    btn.innerHTML = html;
-    btn.onclick = function() {
-      openMemberCard(m.member, m.name, false);
-    };
-
-    const del = document.createElement("button");
-    del.className = "delete-btn";
-    del.textContent = "削除";
-    del.onclick = function() {
-      deleteMember(index);
-    };
-
-    row.appendChild(btn);
-    row.appendChild(del);
-    list.appendChild(row);
-  });
-}
-
-function autoOpenSavedMemberIfNeeded() {
-  if (isManageMode()) return;
-
-  const members = loadMembers();
-
-  if (!members.length) return;
-
-  const lastMember = normalizeMemberNumber(localStorage.getItem(LAST_MEMBER_KEY) || "");
-
-  let target = null;
-
-  if (lastMember) {
-    target = members.find(function(m) {
-      return normalizeMemberNumber(m.member) === lastMember;
-    });
-  }
-
-  if (!target) {
-    target = members[0];
-  }
-
-  if (target && target.member) {
-    openMemberCard(target.member, target.name, true);
-  }
-}
-
-function checkMember() {
-  clearError();
-  hideResult();
-  checkedMember = null;
-
-  const member = normalizeMemberNumber(document.getElementById("memberNumber").value);
+async function loadCount() {
+  const countMain = document.getElementById("countMain");
+  const countSub = document.getElementById("countSub");
 
   if (!member) {
-    showError("会員番号を入力してください。");
+    countMain.textContent = "-";
+    countSub.textContent = "会員番号が取得できませんでした";
     return;
   }
 
-  showLoading();
-
-  const callbackName = "memberLookupCallback_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
-
-  const script = document.createElement("script");
-
-  const timeoutId = setTimeout(function() {
-    cleanupJsonp(callbackName, script);
-    hideLoading();
-    showError("確認に時間がかかっています。通信状況をご確認ください。");
-  }, 10000);
-
-  window[callbackName] = function(result) {
-    clearTimeout(timeoutId);
-    cleanupJsonp(callbackName, script);
-    hideLoading();
-
-    if (!result || !result.ok) {
-      showError((result && result.message) ? result.message : "会員番号が見つかりません。");
-      return;
+  try {
+    if (typeof window.fetchCount !== "function") {
+      throw new Error("fetchCount is not available");
     }
 
-    checkedMember = {
-      member: normalizeMemberNumber(result.member),
-      name: result.name || "",
-      kana: result.kana || ""
-    };
+    const data = await window.fetchCount(member);
 
-    showCheckedMember(checkedMember);
-  };
+    countMain.textContent = String(data.count || 0) + " 回";
 
-  script.src =
-    GAS_URL +
-    "?member=" +
-    encodeURIComponent(member) +
-    "&callback=" +
-    encodeURIComponent(callbackName) +
-    "&t=" +
-    Date.now();
+    if (data.last) {
+      countSub.textContent = "最終受講：" + data.last;
+    } else {
+      countSub.textContent = "今月の受講記録はまだありません";
+    }
 
-  script.onerror = function() {
-    clearTimeout(timeoutId);
-    cleanupJsonp(callbackName, script);
-    hideLoading();
-    showError("会員番号の確認に失敗しました。時間をおいて再度お試しください。");
-  };
-
-  document.body.appendChild(script);
-}
-
-function cleanupJsonp(callbackName, script) {
-  try {
-    delete window[callbackName];
   } catch (e) {
-    window[callbackName] = undefined;
-  }
-
-  if (script && script.parentNode) {
-    script.parentNode.removeChild(script);
+    console.log("loadCount error", e);
+    countMain.textContent = "-";
+    countSub.innerHTML = "<span class='count-error'>受講数を取得できませんでした</span>";
   }
 }
-
-function showCheckedMember(memberData) {
-  document.getElementById("resultName").textContent = memberData.name || "名前未登録";
-  document.getElementById("resultKana").textContent = memberData.kana || "";
-  document.getElementById("resultNumber").textContent = memberData.member || "";
-  document.getElementById("resultBox").style.display = "block";
-}
-
-function registerCheckedMember() {
-  clearError();
-
-  if (!checkedMember || !checkedMember.member) {
-    showError("先に会員番号を確認してください。");
-    return;
-  }
-
-  const members = loadMembers();
-
-  const exists = members.some(function(m) {
-    return normalizeMemberNumber(m.member) === checkedMember.member;
-  });
-
-  if (exists) {
-    showError("この会員証はすでに登録されています。");
-    return;
-  }
-
-  members.push({
-    member: checkedMember.member,
-    name: checkedMember.name,
-    kana: checkedMember.kana,
-    createdAt: new Date().toISOString()
-  });
-
-  saveMembers(members);
-
-  document.getElementById("memberNumber").value = "";
-
-  openMemberCard(checkedMember.member, checkedMember.name, true);
-}
-
-function resetCheck() {
-  checkedMember = null;
-  clearError();
-  hideResult();
-  document.getElementById("memberNumber").focus();
-}
-
-function deleteMember(index) {
-  const members = loadMembers();
-  const target = members[index];
-
-  if (!target) return;
-
-  const ok = confirm((target.name || target.member) + " の会員証登録を削除しますか？");
-  if (!ok) return;
-
-  const lastMember = normalizeMemberNumber(localStorage.getItem(LAST_MEMBER_KEY) || "");
-
-  if (normalizeMemberNumber(target.member) === lastMember) {
-    localStorage.removeItem(LAST_MEMBER_KEY);
-  }
-
-  members.splice(index, 1);
-  saveMembers(members);
-  renderMembers();
-}
-
-function openMemberCard(member, name, replaceMode) {
-  const cleanMember = normalizeMemberNumber(member);
-
-  if (cleanMember) {
-    localStorage.setItem(LAST_MEMBER_KEY, cleanMember);
-  }
-
-  const url =
-    "member.html?member=" +
-    encodeURIComponent(cleanMember) +
-    "&name=" +
-    encodeURIComponent(name || "");
-
-  if (replaceMode) {
-    window.location.replace(url);
-  } else {
-    window.location.href = url;
-  }
-}
-
-function escapeHtml(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-renderMembers();
-autoOpenSavedMemberIfNeeded();
 </script>
 
 </body>
