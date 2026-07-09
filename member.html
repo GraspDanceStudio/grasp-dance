@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <title>会員証</title>
 
-<script src="shared.js?v=20260708-member-big-1"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 
 <style>
@@ -21,14 +20,12 @@ body {
     url('グラスプ.jpg') center/cover no-repeat;
 }
 
-/* 全体 */
 .wrapper {
   width: 100%;
   max-width: 640px;
   padding: 14px;
 }
 
-/* カード共通 */
 .card {
   background: rgba(20, 24, 30, 0.65);
   border: 1px solid rgba(255,255,255,0.18);
@@ -40,7 +37,6 @@ body {
   color: #fff;
 }
 
-/* 上カード */
 .top-card {
   margin-bottom: 18px;
   text-align: center;
@@ -64,36 +60,6 @@ body {
   color: rgba(255,255,255,0.85);
 }
 
-/* 受講数カード */
-.count-card {
-  margin-bottom: 18px;
-  text-align: center;
-  padding: 30px 28px;
-}
-
-.count-title {
-  font-size: 20px;
-  color: rgba(255,255,255,0.82);
-  margin-bottom: 10px;
-}
-
-.count-main {
-  font-size: 42px;
-  font-weight: 900;
-  margin-bottom: 8px;
-}
-
-.count-sub {
-  font-size: 18px;
-  color: rgba(255,255,255,0.82);
-}
-
-.count-error {
-  font-size: 18px;
-  color: rgba(255,220,220,0.95);
-}
-
-/* QRカード */
 .qr-card {
   text-align: center;
 }
@@ -110,7 +76,6 @@ body {
   border-radius: 14px;
 }
 
-/* 補足 */
 .note {
   font-size: 17px;
   color: rgba(255,255,255,0.85);
@@ -118,7 +83,6 @@ body {
   margin-bottom: 24px;
 }
 
-/* ボタン */
 .switch-btn {
   width: 100%;
   border: none;
@@ -131,7 +95,6 @@ body {
   cursor: pointer;
 }
 
-/* スマホ */
 @media (max-width: 480px) {
   .wrapper {
     padding: 8px;
@@ -151,22 +114,6 @@ body {
 
   .number {
     font-size: 18px;
-  }
-
-  .count-card {
-    padding: 28px 22px;
-  }
-
-  .count-title {
-    font-size: 18px;
-  }
-
-  .count-main {
-    font-size: 34px;
-  }
-
-  .count-sub {
-    font-size: 16px;
   }
 
   .note {
@@ -199,12 +146,6 @@ body {
     <div id="memberNumber" class="number"></div>
   </div>
 
-  <div class="card count-card">
-    <div class="count-title">今月の受講数</div>
-    <div id="countMain" class="count-main">照会中…</div>
-    <div id="countSub" class="count-sub"></div>
-  </div>
-
   <div class="card qr-card">
     <div id="qrcode"></div>
 
@@ -226,60 +167,21 @@ const params = new URLSearchParams(window.location.search);
 const member = params.get("member") || "";
 const name = params.get("name") || "";
 
-// 表示
 document.getElementById("memberName").textContent = name || "GUEST";
 document.getElementById("memberNumber").textContent = member;
 
-// QR（LIFF）
 const qrText =
   "https://liff.line.me/2008912129-TQRCpL9d?member=" +
   encodeURIComponent(member);
 
-// QR生成
 QRCode.toCanvas(qrText, { width: 400 }, function (err, canvas) {
   if (!err) {
     document.getElementById("qrcode").appendChild(canvas);
   }
 });
 
-// 今月受講数表示
-loadCount();
-
-// 会員切替
 function switchMember() {
   location.href = "cards.html?manage=1";
-}
-
-async function loadCount() {
-  const countMain = document.getElementById("countMain");
-  const countSub = document.getElementById("countSub");
-
-  if (!member) {
-    countMain.textContent = "-";
-    countSub.textContent = "会員番号が取得できませんでした";
-    return;
-  }
-
-  try {
-    if (typeof window.fetchCount !== "function") {
-      throw new Error("fetchCount is not available");
-    }
-
-    const data = await window.fetchCount(member);
-
-    countMain.textContent = String(data.count || 0) + " 回";
-
-    if (data.last) {
-      countSub.textContent = "最終受講：" + data.last;
-    } else {
-      countSub.textContent = "今月の受講記録はまだありません";
-    }
-
-  } catch (e) {
-    console.log("loadCount error", e);
-    countMain.textContent = "-";
-    countSub.innerHTML = "<span class='count-error'>受講数を取得できませんでした</span>";
-  }
 }
 </script>
 
