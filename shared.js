@@ -22,7 +22,7 @@
     "木":["SERINAキッズ","SERINA初中級","Shogo","RIN","心","K×G瀬戸/愛梨","K×G瀬戸/Natsune"],
     "金":["manaキッズ","mana初級","KANAMI","SAMURAI/4-6年","SAMURAI/オープン"],
     "土":["幼児","nikoキッズ","SAORI","TAKUEI","愛梨","MAHIRO初級","MAHIRO中級","NC_スターター","RYUYA"],
-    "WS":["WS_5/2Akane練習会","WS_5/9niko練習会"]
+    "WS":["WS_7/25キッズチャレンジ"]
   };
 
   let duplicateCacheMap = {};
