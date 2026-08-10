@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>受付</title>
 
-<script src="shared.js?v=20260810-1"></script>
+<script src="shared.js?v=20260810-2"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
@@ -26,7 +26,6 @@ body {
   font-size: 20px;
 }
 
-/* iPhone/Android/PCの標準ボタン見た目をリセット */
 button,
 input,
 select,
@@ -111,7 +110,6 @@ h2#title {
   border: 2px solid #ffd966;
 }
 
-/* 曜日ボタンエリア：横一列 */
 #dayButtons {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -119,7 +117,6 @@ h2#title {
   margin: 10px 0 16px;
 }
 
-/* 曜日ボタン */
 .day-btn {
   min-height: 54px;
   font-size: 20px;
@@ -146,7 +143,6 @@ h2#title {
   transform: translateY(1px);
 }
 
-/* クラスボタンを並べるエリア */
 #container {
   display: grid;
   grid-template-columns: 1fr;
@@ -154,7 +150,6 @@ h2#title {
   padding-bottom: 24px;
 }
 
-/* クラスボタン */
 .class-btn {
   width: 100%;
   height: 150px;
@@ -189,7 +184,6 @@ h2#title {
   transform: none;
 }
 
-/* shared.js側で受付済み/選択済みクラスが付く可能性用 */
 .class-btn.done,
 .class-btn.received,
 .class-btn.accepted,
@@ -200,7 +194,18 @@ h2#title {
   box-shadow: none;
 }
 
-/* 完了オーバーレイ */
+/* 振替モードON中は受付済み風の見た目を解除 */
+body.transfer-mode .class-btn.done,
+body.transfer-mode .class-btn.received,
+body.transfer-mode .class-btn.accepted,
+body.transfer-mode .class-btn.duplicate {
+  background: #ffffff;
+  color: #111;
+  border-color: #d0d7de;
+  box-shadow: 0 5px 14px rgba(0,0,0,0.14);
+  cursor: pointer;
+}
+
 #complete {
   position: fixed;
   inset: 0;
@@ -239,7 +244,6 @@ h2#title {
   display: block;
 }
 
-/* 小さめ端末調整 */
 @media (max-width: 380px) {
   body {
     padding: 10px;
@@ -377,10 +381,12 @@ h2#title {
       transferBtn.textContent = "振替モード：ON";
       transferBtn.classList.add("on");
       transferNote.style.display = "block";
+      document.body.classList.add("transfer-mode");
     }else{
       transferBtn.textContent = "振替モード：OFF";
       transferBtn.classList.remove("on");
       transferNote.style.display = "none";
+      document.body.classList.remove("transfer-mode");
     }
   }
 
@@ -388,6 +394,7 @@ h2#title {
     transferMode = !!value;
     updateTransferModeView();
     renderAll();
+    scheduleUnlockClassButtonsForTransferMode();
   }
 
   function getSubmitClasses(classNames){
@@ -410,8 +417,34 @@ h2#title {
 
     document.querySelectorAll(".class-btn").forEach(btn => {
       btn.disabled = false;
-      btn.classList.remove("done", "received", "accepted", "duplicate");
+      btn.removeAttribute("disabled");
+
+      btn.classList.remove(
+        "done",
+        "received",
+        "accepted",
+        "duplicate",
+        "disabled"
+      );
+
+      btn.style.pointerEvents = "auto";
+      btn.style.cursor = "pointer";
+      btn.style.opacity = "1";
+      btn.style.background = "#ffffff";
+      btn.style.color = "#111";
     });
+  }
+
+  function scheduleUnlockClassButtonsForTransferMode(){
+    if(!transferMode) return;
+
+    unlockClassButtonsForTransferMode();
+
+    setTimeout(unlockClassButtonsForTransferMode, 50);
+    setTimeout(unlockClassButtonsForTransferMode, 200);
+    setTimeout(unlockClassButtonsForTransferMode, 600);
+    setTimeout(unlockClassButtonsForTransferMode, 1200);
+    setTimeout(unlockClassButtonsForTransferMode, 2000);
   }
 
   transferBtn.onclick = () => {
@@ -460,6 +493,7 @@ h2#title {
               }
 
               renderAll();
+              scheduleUnlockClassButtonsForTransferMode();
 
               completeDetail.innerHTML =
                 "<span class='complete-title'>✅ 読み取り完了</span><br><br>" +
@@ -533,6 +567,7 @@ h2#title {
           );
 
           submitting = false;
+          scheduleUnlockClassButtonsForTransferMode();
           return;
         }
       }
@@ -540,6 +575,7 @@ h2#title {
       console.log("final duplicate check error", e);
       alert("重複確認ができませんでした。通信状態を確認して、もう一度受付してください。");
       submitting = false;
+      scheduleUnlockClassButtonsForTransferMode();
       return;
     }
 
@@ -573,6 +609,7 @@ h2#title {
       setTimeout(() => {
         complete.style.display = "none";
         submitting = false;
+        scheduleUnlockClassButtonsForTransferMode();
         openScanner();
       }, 1200);
 
@@ -581,6 +618,7 @@ h2#title {
       alert("送信エラー");
       submitting = false;
       complete.style.display = "none";
+      scheduleUnlockClassButtonsForTransferMode();
     }
   }
 
@@ -601,7 +639,7 @@ h2#title {
       onSubmit: submit
     });
 
-    unlockClassButtonsForTransferMode();
+    scheduleUnlockClassButtonsForTransferMode();
   }
 
   renderAll();
