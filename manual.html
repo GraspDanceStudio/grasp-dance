@@ -8,10 +8,16 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
-body { font-family: sans-serif; padding: 12px; }
+body {
+  font-family: sans-serif;
+  padding: 12px;
+}
 
-.input-box { margin: 10px 0 14px; }
-input[type="text"]{
+.input-box {
+  margin: 10px 0 14px;
+}
+
+input[type="text"] {
   font-size: 28px;
   padding: 18px;
   width: 100%;
@@ -24,6 +30,7 @@ input[type="text"]{
   margin: 6px 4px;
   opacity: 0.6;
 }
+
 .day-btn.today {
   opacity: 1;
   background: #66adff;
@@ -39,6 +46,40 @@ input[type="text"]{
   text-align: left;
 }
 
+/* 振替モード */
+.transfer-btn {
+  font-size: 30px;
+  padding: 24px 20px;
+  margin: 12px 0 10px;
+  width: 100%;
+  text-align: center;
+  font-weight: 900;
+  border-radius: 16px;
+  border: 2px solid #d0d7de;
+  background: #ffffff;
+  color: #111;
+  cursor: pointer;
+}
+
+.transfer-btn.on {
+  background: #ff7a00;
+  color: #fff;
+  border-color: #e56d00;
+}
+
+.transfer-note {
+  display: none;
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #fff3cd;
+  color: #5c4200;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.45;
+  border: 2px solid #ffd966;
+}
+
 #complete {
   position: fixed;
   inset: 0;
@@ -48,6 +89,7 @@ input[type="text"]{
   justify-content: center;
   z-index: 999;
 }
+
 #completeBox {
   background: #fff;
   padding: 44px 34px;
@@ -56,18 +98,25 @@ input[type="text"]{
   width: 92%;
   max-width: 560px;
 }
+
 #completeBox .done {
   font-size: 44px;
   font-weight: 800;
   margin-bottom: 12px;
 }
+
 #completeBox .detail {
   font-size: 24px;
   line-height: 1.6;
 }
 
-.section { display: none; }
-.section.active { display: block; }
+.section {
+  display: none;
+}
+
+.section.active {
+  display: block;
+}
 </style>
 </head>
 
@@ -78,14 +127,26 @@ input[type="text"]{
   <div class="input-box">
     <input id="memberInput" type="text" placeholder="会員番号"/>
   </div>
+
   <button id="goBtn" class="class-btn" style="text-align:center;">
     次へ（クラス選択）
   </button>
 </div>
 
 <div id="sectionSelect" class="section">
+
+  <button id="transferBtn" class="transfer-btn" type="button">
+    振替モード：OFF
+  </button>
+
+  <div id="transferNote" class="transfer-note">
+    現在、振替モードONです。<br>
+    受付するとクラス名に「（振替）」が付きます。
+  </div>
+
   <div id="dayButtons"></div>
   <div id="container"></div>
+
   <button id="backBtn" class="day-btn" style="margin-top:10px;">
     ← 会員番号入力に戻る
   </button>
@@ -109,17 +170,23 @@ const complete = document.getElementById("complete");
 const completeDetail = document.getElementById("completeDetail");
 const sectionInput = document.getElementById("sectionInput");
 const sectionSelect = document.getElementById("sectionSelect");
+const transferBtn = document.getElementById("transferBtn");
+const transferNote = document.getElementById("transferNote");
 
 let currentMember = "";
 let submitting = false;
 let selectedDay = "";
+let transferMode = false;
 
-function normalizeMemberSafe(v){
-  try{
-    if(typeof normalizeMember === "function"){
+const TRANSFER_SUFFIX = "（振替）";
+
+function normalizeMemberSafe(v) {
+  try {
+    if (typeof normalizeMember === "function") {
       return normalizeMember(v);
     }
-  }catch(e){}
+  } catch(e) {}
+
   return String(v || "")
     .replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
     .replace(/[^A-Za-z0-9\-_]/g, "")
@@ -127,19 +194,56 @@ function normalizeMemberSafe(v){
     .trim();
 }
 
-function escapeHtmlSafe(v){
-  try{
-    if(typeof escapeHtml === "function"){
+function escapeHtmlSafe(v) {
+  try {
+    if (typeof escapeHtml === "function") {
       return escapeHtml(v);
     }
-  }catch(e){}
+  } catch(e) {}
+
   return String(v || "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
 }
+
+function updateTransferModeView() {
+  if (transferMode) {
+    transferBtn.textContent = "振替モード：ON";
+    transferBtn.classList.add("on");
+    transferNote.style.display = "block";
+  } else {
+    transferBtn.textContent = "振替モード：OFF";
+    transferBtn.classList.remove("on");
+    transferNote.style.display = "none";
+  }
+}
+
+function setTransferMode(value) {
+  transferMode = !!value;
+  updateTransferModeView();
+}
+
+function getSubmitClasses(classNames) {
+  const classes = (Array.isArray(classNames) ? classNames : [classNames])
+    .map(c => String(c || "").trim())
+    .filter(c => c);
+
+  if (!transferMode) {
+    return classes;
+  }
+
+  return classes.map(c => {
+    if (c.endsWith(TRANSFER_SUFFIX)) return c;
+    return c + TRANSFER_SUFFIX;
+  });
+}
+
+transferBtn.onclick = () => {
+  setTransferMode(!transferMode);
+};
 
 memberInput.addEventListener("input", () => {
   let v = memberInput.value;
@@ -170,30 +274,44 @@ function showInputScreen() {
   memberInput.value = "";
   setTimeout(() => memberInput.focus(), 50);
 }
-
+  
 function showSelectScreen() {
   sectionInput.classList.remove("active");
   sectionSelect.classList.add("active");
 
   if (!selectedDay) {
-    try{
+    try {
       selectedDay = getTokyoWeekdayLabel();
-    }catch(e){
+    } catch(e) {
       selectedDay = "月";
     }
+
     if (selectedDay === "日") selectedDay = "土";
   }
 
+  updateTransferModeView();
   renderAll();
 }
 
-async function submit(classNames){
+async function submit(classNames) {
 
-  if(submitting) return;
+  if (submitting) return;
   submitting = true;
 
   const member = normalizeMemberSafe(window.currentMember);
-  const classes = Array.isArray(classNames) ? classNames : [classNames];
+  const classes = getSubmitClasses(classNames);
+
+  if (!member) {
+    alert("会員番号を入力してください");
+    submitting = false;
+    return;
+  }
+
+  if (classes.length === 0) {
+    alert("クラスを選択してください");
+    submitting = false;
+    return;
+  }
 
   const requests = classes.map(className => {
     const url =
@@ -221,7 +339,7 @@ async function submit(classNames){
 }
 
 function renderAll() {
-  try{
+  try {
     renderDayButtons({
       dayButtonsEl: dayButtons,
       selectedDay,
@@ -237,7 +355,8 @@ function renderAll() {
       containerEl: container,
       onSubmit: submit
     });
-  }catch(e){
+
+  } catch(e) {
     console.log("renderAll error", e);
     alert("画面表示エラー");
   }
@@ -259,9 +378,10 @@ goBtn.onclick = () => {
 backBtn.onclick = () => showInputScreen();
 
 (async () => {
-  try{
+  try {
     await initLiffSafe();
-  }catch(e){}
+  } catch(e) {}
+
   showInputScreen();
 })();
 </script>
