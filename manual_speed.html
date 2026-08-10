@@ -25,7 +25,7 @@ body {
   font-size: 24px;
   font-weight: 800;
   line-height: 1.5;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   padding: 14px 16px;
   border-radius: 12px;
   background: #f3f3f3;
@@ -34,6 +34,37 @@ body {
 .current-class-box.active {
   background: #e8f2ff;
   color: #114b9b;
+}
+
+/* 振替モード：控えめ表示 */
+.transfer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.transfer-btn {
+  font-size: 16px;
+  font-weight: 800;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #cfd7de;
+  background: #fff;
+  color: #333;
+  cursor: pointer;
+}
+
+.transfer-btn.on {
+  background: #fff3cd;
+  color: #6b4a00;
+  border-color: #e0b800;
+}
+
+.transfer-help {
+  font-size: 14px;
+  color: #666;
+  line-height: 1.4;
 }
 
 .input-box {
@@ -187,6 +218,12 @@ input[type="text"]:disabled{
   .day-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .transfer-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
 }
 </style>
 </head>
@@ -198,6 +235,15 @@ input[type="text"]:disabled{
 
 <div id="currentClassBox" class="current-class-box">
   現在受付中：未選択
+</div>
+
+<div class="transfer-row">
+  <button id="transferBtn" class="transfer-btn" type="button">
+    振替：OFF
+  </button>
+  <div id="transferHelp" class="transfer-help">
+    ONの受付はクラス名に「（振替）」が付きます
+  </div>
 </div>
 
 <div class="input-box">
@@ -268,6 +314,7 @@ input[type="text"]:disabled{
   const DUPLICATE_RESET_MS = 900;
   const COMPLETE_RESET_MS = 200;
   const INPUT_SETTLE_MS = 1000;
+  const TRANSFER_SUFFIX = "（振替）";
 
   /*
     manual_speedは本校高速受付用。
@@ -292,6 +339,7 @@ input[type="text"]:disabled{
 
   const metaRow = document.getElementById("metaRow");
   const currentClassBox = document.getElementById("currentClassBox");
+  const transferBtn = document.getElementById("transferBtn");
   const memberInput = document.getElementById("memberInput");
   const statusBox = document.getElementById("statusBox");
   const scanDebugBox = document.getElementById("scanDebugBox");
@@ -303,6 +351,7 @@ input[type="text"]:disabled{
   let selectedDay = "";
   let selectedClass = "";
   let submitting = false;
+  let transferMode = false;
   let inputTimer = null;
   let resetTimer = null;
   let lastProcessedMember = "";
@@ -328,6 +377,39 @@ input[type="text"]:disabled{
       "直近読取：<b>" + rawText + "</b><br>" +
       "抽出会員番号：<b>" + memberText + "</b>";
   }
+
+  function updateTransferModeView(){
+    if(transferMode){
+      transferBtn.textContent = "振替：ON";
+      transferBtn.classList.add("on");
+    }else{
+      transferBtn.textContent = "振替：OFF";
+      transferBtn.classList.remove("on");
+    }
+  }
+
+  function setTransferMode(value){
+    transferMode = !!value;
+    updateTransferModeView();
+    updateCurrentClassBox();
+  }
+
+  function getSubmitClassName(className){
+    const s = String(className || "").trim();
+    if(!s) return "";
+
+    if(!transferMode) return s;
+
+    if(s.endsWith(TRANSFER_SUFFIX)) return s;
+    return s + TRANSFER_SUFFIX;
+  }
+
+  transferBtn.onclick = () => {
+    if(submitting) return;
+    setTransferMode(!transferMode);
+    setStatus("読み取り待機中");
+    focusInput(false);
+  };
 
   function focusInput(forceSelect = false){
     setTimeout(() => {
@@ -385,8 +467,11 @@ input[type="text"]:disabled{
   function updateCurrentClassBox(){
     if(selectedClass){
       currentClassBox.classList.add("active");
+
+      const submitClassName = getSubmitClassName(selectedClass);
+
       currentClassBox.innerHTML =
-        "現在受付中：<b>" + escapeHtml(displayClassName(selectedClass)) + "</b>";
+        "現在受付中：<b>" + escapeHtml(displayClassName(submitClassName)) + "</b>";
     }else{
       currentClassBox.classList.remove("active");
       currentClassBox.innerHTML = "現在受付中：未選択";
@@ -670,6 +755,7 @@ input[type="text"]:disabled{
   async function processReception(rawValue){
     const raw = cleanupScanNoise(rawValue);
     const member = extractMemberFromRaw(raw);
+    const submitClassName = getSubmitClassName(selectedClass);
 
     updateScanDebug(raw, member);
 
@@ -680,7 +766,7 @@ input[type="text"]:disabled{
 
     if(!member){
       sendMonitor({
-        class: selectedClass,
+        class: submitClassName,
         raw: rawValue,
         member: "",
         status: "NG",
@@ -728,11 +814,11 @@ input[type="text"]:disabled{
         manual_speedは連続受付で前の会員のキャッシュを握ると危険なので、
         重複チェックは forceRefresh=true で毎回最新ログを確認する。
       */
-      const duplicate = await checkDuplicate(member, selectedClass, true);
+      const duplicate = await checkDuplicate(member, submitClassName, true);
 
       if(duplicate){
         sendMonitor({
-          class: selectedClass,
+          class: submitClassName,
           raw: rawValue,
           member: member,
           status: "重複",
@@ -744,7 +830,7 @@ input[type="text"]:disabled{
         alert(
           "この会員は本日すでに受付済みです。\n\n" +
           "会員番号： " + member + "\n" +
-          "クラス： " + displayClassName(selectedClass)
+          "クラス： " + displayClassName(submitClassName)
         );
 
         resetTimer = setTimeout(() => {
@@ -757,12 +843,12 @@ input[type="text"]:disabled{
       }
 
       setStatus("送信中…");
-      showComplete(member, selectedClass);
+      showComplete(member, submitClassName);
 
-      await submitFixedClass(member, selectedClass);
+      await submitFixedClass(member, submitClassName);
 
       sendMonitor({
-        class: selectedClass,
+        class: submitClassName,
         raw: rawValue,
         member: member,
         status: "OK",
@@ -907,6 +993,7 @@ input[type="text"]:disabled{
 
   renderDayButtons();
   renderClassButtons();
+  updateTransferModeView();
   updateCurrentClassBox();
   updateScanDebug("", "");
   setStatus("読み取り待機中");
