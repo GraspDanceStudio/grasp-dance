@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <title>受付（手入力）</title>
 
-<script src="./shared.js?v=20260810-1"></script>
+<script src="./shared.js?v=20260725-1"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
@@ -78,6 +78,16 @@ input[type="text"] {
   font-weight: 900;
   line-height: 1.45;
   border: 2px solid #ffd966;
+}
+
+/* 振替モードON中は受付済み風の見た目を解除 */
+body.transfer-mode .class-btn.done,
+body.transfer-mode .class-btn.received,
+body.transfer-mode .class-btn.accepted,
+body.transfer-mode .class-btn.duplicate {
+  background: #ffffff;
+  color: #111;
+  cursor: pointer;
 }
 
 #complete {
@@ -214,10 +224,12 @@ function updateTransferModeView() {
     transferBtn.textContent = "振替モード：ON";
     transferBtn.classList.add("on");
     transferNote.style.display = "block";
+    document.body.classList.add("transfer-mode");
   } else {
     transferBtn.textContent = "振替モード：OFF";
     transferBtn.classList.remove("on");
     transferNote.style.display = "none";
+    document.body.classList.remove("transfer-mode");
   }
 }
 
@@ -228,6 +240,8 @@ function setTransferMode(value) {
   if (sectionSelect.classList.contains("active")) {
     renderAll();
   }
+
+  scheduleUnlockClassButtonsForTransferMode();
 }
 
 function getSubmitClasses(classNames) {
@@ -250,8 +264,34 @@ function unlockClassButtonsForTransferMode(){
 
   document.querySelectorAll(".class-btn").forEach(btn => {
     btn.disabled = false;
-    btn.classList.remove("done", "received", "accepted", "duplicate");
+    btn.removeAttribute("disabled");
+
+    btn.classList.remove(
+      "done",
+      "received",
+      "accepted",
+      "duplicate",
+      "disabled"
+    );
+
+    btn.style.pointerEvents = "auto";
+    btn.style.cursor = "pointer";
+    btn.style.opacity = "1";
+    btn.style.background = "#ffffff";
+    btn.style.color = "#111";
   });
+}
+
+function scheduleUnlockClassButtonsForTransferMode(){
+  if(!transferMode) return;
+
+  unlockClassButtonsForTransferMode();
+
+  setTimeout(unlockClassButtonsForTransferMode, 50);
+  setTimeout(unlockClassButtonsForTransferMode, 200);
+  setTimeout(unlockClassButtonsForTransferMode, 600);
+  setTimeout(unlockClassButtonsForTransferMode, 1200);
+  setTimeout(unlockClassButtonsForTransferMode, 2000);
 }
 
 transferBtn.onclick = () => {
@@ -304,6 +344,7 @@ function showSelectScreen() {
 
   updateTransferModeView();
   renderAll();
+  scheduleUnlockClassButtonsForTransferMode();
 }
 
 async function submit(classNames) {
@@ -317,12 +358,14 @@ async function submit(classNames) {
   if (!member) {
     alert("会員番号を入力してください");
     submitting = false;
+    scheduleUnlockClassButtonsForTransferMode();
     return;
   }
 
   if (classes.length === 0) {
     alert("クラスを選択してください");
     submitting = false;
+    scheduleUnlockClassButtonsForTransferMode();
     return;
   }
 
@@ -347,6 +390,7 @@ async function submit(classNames) {
 
   setTimeout(() => {
     complete.style.display = "none";
+    submitting = false;
     showInputScreen();
   }, 1200);
 }
@@ -369,7 +413,7 @@ function renderAll() {
       onSubmit: submit
     });
 
-    unlockClassButtonsForTransferMode();
+    scheduleUnlockClassButtonsForTransferMode();
 
   } catch(e) {
     console.log("renderAll error", e);
