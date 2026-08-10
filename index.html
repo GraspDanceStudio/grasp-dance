@@ -154,7 +154,7 @@ h2#title {
   padding-bottom: 24px;
 }
 
-/* クラスボタン：一番大きい文字 */
+/* クラスボタン */
 .class-btn {
   width: 100%;
   height: 150px;
@@ -387,6 +387,7 @@ h2#title {
   function setTransferMode(value){
     transferMode = !!value;
     updateTransferModeView();
+    renderAll();
   }
 
   function getSubmitClasses(classNames){
@@ -401,6 +402,15 @@ h2#title {
     return classes.map(c => {
       if(c.endsWith(TRANSFER_SUFFIX)) return c;
       return c + TRANSFER_SUFFIX;
+    });
+  }
+
+  function unlockClassButtonsForTransferMode(){
+    if(!transferMode) return;
+
+    document.querySelectorAll(".class-btn").forEach(btn => {
+      btn.disabled = false;
+      btn.classList.remove("done", "received", "accepted", "duplicate");
     });
   }
 
@@ -563,7 +573,6 @@ h2#title {
       setTimeout(() => {
         complete.style.display = "none";
         submitting = false;
-        
         openScanner();
       }, 1200);
 
@@ -591,6 +600,8 @@ h2#title {
       containerEl: container,
       onSubmit: submit
     });
+
+    unlockClassButtonsForTransferMode();
   }
 
   renderAll();
