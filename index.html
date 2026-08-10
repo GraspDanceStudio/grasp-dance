@@ -56,7 +56,7 @@ h2#title {
   font-size: 30px;
   line-height: 1.2;
   padding: 24px 20px;
-  margin: 10px 0 16px;
+  margin: 10px 0 12px;
   background: #ffd966;
   color: #111;
   font-weight: 900;
@@ -68,6 +68,47 @@ h2#title {
 .remain-btn:active {
   transform: translateY(1px);
   box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+}
+
+/* 振替モード */
+.transfer-btn {
+  width: 100%;
+  min-height: 88px;
+  font-size: 30px;
+  line-height: 1.2;
+  padding: 24px 20px;
+  margin: 0 0 10px;
+  background: #ffffff;
+  color: #111;
+  font-weight: 900;
+  border: 2px solid #d0d7de;
+  border-radius: 18px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.14);
+}
+
+.transfer-btn.on {
+  background: #ff7a00;
+  color: #fff;
+  border-color: #e56d00;
+  box-shadow: 0 5px 14px rgba(255,122,0,0.34);
+}
+
+.transfer-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+}
+
+.transfer-note {
+  display: none;
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #fff3cd;
+  color: #5c4200;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.45;
+  border: 2px solid #ffd966;
 }
 
 /* 曜日ボタンエリア：横一列 */
@@ -138,7 +179,8 @@ h2#title {
 
 .class-btn:disabled,
 .day-btn:disabled,
-.remain-btn:disabled {
+.remain-btn:disabled,
+.transfer-btn:disabled {
   background: #c8ced8;
   color: #fff;
   border-color: #c8ced8;
@@ -214,6 +256,17 @@ h2#title {
     padding: 22px 18px;
   }
 
+  .transfer-btn {
+    min-height: 80px;
+    font-size: 28px;
+    padding: 22px 18px;
+  }
+
+  .transfer-note {
+    font-size: 19px;
+    padding: 12px 14px;
+  }
+
   #dayButtons {
     gap: 4px;
   }
@@ -254,6 +307,15 @@ h2#title {
 受講数照会
 </button>
 
+<button id="transferBtn" class="transfer-btn" type="button">
+振替モード：OFF
+</button>
+
+<div id="transferNote" class="transfer-note">
+現在、振替モードONです。<br>
+受付するとクラス名に「（振替）」が付きます。
+</div>
+
 <div id="dayButtons"></div>
 <div id="container"></div>
 
@@ -274,11 +336,16 @@ h2#title {
   const complete = document.getElementById("complete");
   const completeDetail = document.getElementById("completeDetail");
   const remainBtn = document.getElementById("remainBtn");
+  const transferBtn = document.getElementById("transferBtn");
+  const transferNote = document.getElementById("transferNote");
 
   let selectedDay = getTokyoWeekdayLabel();
   if(selectedDay === "日") selectedDay = "月";
 
   let submitting = false;
+  let transferMode = false;
+
+  const TRANSFER_SUFFIX = "（振替）";
   const cleanBaseUrl = location.origin + location.pathname;
 
   function getMemberFromUrl(){
@@ -305,6 +372,42 @@ h2#title {
     return m;
   }
 
+  function updateTransferModeView(){
+    if(transferMode){
+      transferBtn.textContent = "振替モード：ON";
+      transferBtn.classList.add("on");
+      transferNote.style.display = "block";
+    }else{
+      transferBtn.textContent = "振替モード：OFF";
+      transferBtn.classList.remove("on");
+      transferNote.style.display = "none";
+    }
+  }
+
+  function setTransferMode(value){
+    transferMode = !!value;
+    updateTransferModeView();
+  }
+
+  function getSubmitClasses(classNames){
+    const classes = (Array.isArray(classNames) ? classNames : [classNames])
+      .map(c => String(c || "").trim())
+      .filter(c => c);
+
+    if(!transferMode){
+      return classes;
+    }
+
+    return classes.map(c => {
+      if(c.endsWith(TRANSFER_SUFFIX)) return c;
+      return c + TRANSFER_SUFFIX;
+    });
+  }
+
+  transferBtn.onclick = () => {
+    setTransferMode(!transferMode);
+  };
+
   let firstMember = getMemberFromUrl();
 
   if(!firstMember && typeof liff !== "undefined"){
@@ -321,6 +424,7 @@ h2#title {
   }
 
   setCurrentMember(firstMember);
+  updateTransferModeView();
 
   window.openScanner = function(){
     if(typeof liff !== "undefined" && liff.isInClient()){
@@ -399,9 +503,7 @@ h2#title {
       return;
     }
 
-    const classes = (Array.isArray(classNames) ? classNames : [classNames])
-      .map(c => String(c || "").trim())
-      .filter(c => c);
+    const classes = getSubmitClasses(classNames);
 
     if(classes.length === 0){
       alert("クラスを選択してください");
@@ -461,6 +563,10 @@ h2#title {
       setTimeout(() => {
         complete.style.display = "none";
         submitting = false;
+
+        // 誤受付防止のため、受付完了後は振替モードをOFFに戻す
+        setTransferMode(false);
+
         openScanner();
       }, 1200);
 
