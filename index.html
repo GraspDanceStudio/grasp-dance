@@ -563,10 +563,7 @@ h2#title {
       setTimeout(() => {
         complete.style.display = "none";
         submitting = false;
-
-        // 誤受付防止のため、受付完了後は振替モードをOFFに戻す
-        setTransferMode(false);
-
+        
         openScanner();
       }, 1200);
 
