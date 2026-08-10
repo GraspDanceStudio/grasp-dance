@@ -224,6 +224,10 @@ function updateTransferModeView() {
 function setTransferMode(value) {
   transferMode = !!value;
   updateTransferModeView();
+
+  if (sectionSelect.classList.contains("active")) {
+    renderAll();
+  }
 }
 
 function getSubmitClasses(classNames) {
@@ -238,6 +242,15 @@ function getSubmitClasses(classNames) {
   return classes.map(c => {
     if (c.endsWith(TRANSFER_SUFFIX)) return c;
     return c + TRANSFER_SUFFIX;
+  });
+}
+
+function unlockClassButtonsForTransferMode(){
+  if(!transferMode) return;
+
+  document.querySelectorAll(".class-btn").forEach(btn => {
+    btn.disabled = false;
+    btn.classList.remove("done", "received", "accepted", "duplicate");
   });
 }
 
@@ -274,7 +287,7 @@ function showInputScreen() {
   memberInput.value = "";
   setTimeout(() => memberInput.focus(), 50);
 }
-  
+
 function showSelectScreen() {
   sectionInput.classList.remove("active");
   sectionSelect.classList.add("active");
@@ -356,6 +369,8 @@ function renderAll() {
       onSubmit: submit
     });
 
+    unlockClassButtonsForTransferMode();
+
   } catch(e) {
     console.log("renderAll error", e);
     alert("画面表示エラー");
@@ -382,6 +397,7 @@ backBtn.onclick = () => showInputScreen();
     await initLiffSafe();
   } catch(e) {}
 
+  updateTransferModeView();
   showInputScreen();
 })();
 </script>
