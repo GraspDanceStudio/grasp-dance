@@ -25,6 +25,9 @@
     "WS":["WS_7/25キッズチャレンジ"]
   };
 
+  const TRANSFER_SUFFIX = "（振替）";
+  window.TRANSFER_SUFFIX = TRANSFER_SUFFIX;
+
   let duplicateCacheMap = {};
 
   const LOCAL_PENDING_STORAGE_KEY = "dance_accept_pending_duplicates_v1";
@@ -244,9 +247,6 @@
       01210018
       1210018
     を同一会員として扱う。
-
-    今後 shared.js を修正するときも、
-    isSameMemberId() と getMemberCompareKey() の仕様は変更しないこと。
   */
   function getMemberCompareKey(value){
     const s = window.normalizeMember(value);
@@ -280,6 +280,55 @@
     const s = String(className || "");
     return day === "WS" ? s.replace(/^WS_/, "") : s;
   }
+
+  /*
+    【振替モード対応】
+    index.html / manual.html 側で振替モードONにすると
+    body に transfer-mode クラスが付く。
+    shared.js 側ではそれを見て、
+    重複チェックも送信クラス名も「クラス名（振替）」として扱う。
+  */
+  function isTransferModeOn(){
+    try{
+      if(typeof window.isTransferMode === "function"){
+        return !!window.isTransferMode();
+      }
+    }catch(e){}
+
+    if(window.transferMode === true) return true;
+    if(window.receptionTransferMode === true) return true;
+
+    try{
+      return !!(
+        document.body &&
+        document.body.classList &&
+        document.body.classList.contains("transfer-mode")
+      );
+    }catch(e){}
+
+    return false;
+  }
+
+  function addTransferSuffix(className){
+    const cls = normalizeClassName(className);
+    if(!cls) return "";
+    if(cls.endsWith(TRANSFER_SUFFIX)) return cls;
+    return cls + TRANSFER_SUFFIX;
+  }
+
+  function getReceptionClassNameForCurrentMode(className){
+    const cls = normalizeClassName(className);
+    if(!cls) return "";
+
+    if(isTransferModeOn()){
+      return addTransferSuffix(cls);
+    }
+
+    return cls;
+  }
+
+  window.isTransferModeOn = isTransferModeOn;
+  window.getReceptionClassNameForCurrentMode = getReceptionClassNameForCurrentMode;
 
   function escapeForGvizString(value){
     return String(value || "")
@@ -635,10 +684,14 @@
 
   window.renderClasses = function({ day, titleEl, containerEl, onSubmit }){
 
-    titleEl.textContent =
+    const titleText =
       day === "WS"
         ? "本日のクラス（WS）"
         : `本日のクラス（${day}曜日）`;
+
+    titleEl.textContent = isTransferModeOn()
+      ? titleText + "（振替モード）"
+      : titleText;
 
     containerEl.innerHTML = "";
 
@@ -654,8 +707,14 @@
     const confirmBtn = document.createElement("button");
     confirmBtn.type = "button";
     confirmBtn.className = "remain-btn";
-    confirmBtn.textContent = "選択したクラスを受付";
+    confirmBtn.textContent = isTransferModeOn()
+      ? "選択したクラスを振替受付"
+      : "選択したクラスを受付";
     confirmBtn.style.display = "none";
+
+    function getClassNameForNow(className){
+      return getReceptionClassNameForCurrentMode(className);
+    }
 
     function refreshSelected(){
       if(!selectedClasses.length){
@@ -667,7 +726,7 @@
       selectedBox.innerHTML =
         "<b>選択中：</b><br>" +
         selectedClasses
-          .map(c => "・" + window.escapeHtml(displayClassName(day,c)))
+          .map(c => "・" + window.escapeHtml(displayClassName(day, getClassNameForNow(c))))
           .join("<br>");
 
       confirmBtn.style.display = "block";
@@ -681,10 +740,12 @@
 
     function applyDuplicateButtons(duplicateSet){
       buttonMap.forEach((btn, className) => {
-        const normalized = normalizeClassName(className);
+        const classNameForCheck = getClassNameForNow(className);
+        const normalized = normalizeClassName(classNameForCheck);
+
         if(duplicateSet.has(normalized)){
           removeSelectedClass(className);
-          markButtonAsAccepted(btn, day, className);
+          markButtonAsAccepted(btn, day, classNameForCheck);
         }
       });
     }
@@ -700,7 +761,7 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "class-btn";
-      btn.textContent = "受付 ▶ " + displayClassName(day,className);
+      btn.textContent = "受付 ▶ " + displayClassName(day, getClassNameForNow(className));
 
       buttonMap.set(className, btn);
 
@@ -745,7 +806,13 @@
       }
 
       const member = getCurrentMemberForDuplicateCheck();
-      const classesToSubmit = selectedClasses.slice();
+
+      /*
+        重要：
+        振替モードONのときは、
+        通常クラス名ではなく「クラス名（振替）」で重複チェックする。
+      */
+      const classesToSubmit = selectedClasses.map(c => getClassNameForNow(c));
 
       if(member){
         const duplicates = await window.getTodayDuplicateClasses(member, classesToSubmit, true);
