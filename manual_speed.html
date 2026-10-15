@@ -359,6 +359,15 @@ input[type="text"]:disabled{
   let lastRawForTimer = "";
   let lastHandledRaw = "";
 
+  /*
+    Windowsの日本語IMEがONでも、スキャナーが送った「物理キーコード」から
+    数字だけを別経路で記録する。
+    画面上の文字が全角化・変換されても、会員番号の数字を壊さず取得するため。
+  */
+  let hardwareDigitRun = "";
+  let hardwareLastMember = "";
+  let lastHardwareKeyAt = 0;
+
   function setStatus(text){
     statusBox.textContent = text;
   }
@@ -500,6 +509,88 @@ input[type="text"]:disabled{
     }
   }
 
+  function resetHardwareCapture(){
+    hardwareDigitRun = "";
+    hardwareLastMember = "";
+    lastHardwareKeyAt = 0;
+  }
+
+  function getHardwareCapturedMember(rawValue){
+    const raw = String(rawValue || "");
+    const looksLikeQr =
+      /https?/i.test(raw) ||
+      /liff/i.test(raw) ||
+      /line/i.test(raw) ||
+      /member/i.test(raw) ||
+      raw.length > 20;
+
+    const current =
+      /^\d{7,8}$/.test(hardwareDigitRun)
+        ? hardwareDigitRun
+        : (/^\d{7,8}$/.test(hardwareLastMember) ? hardwareLastMember : "");
+
+    if(!current) return "";
+
+    /*
+      QRではURL中の別数字を誤採用しないため、
+      7〜8桁の物理キー連続列だけを採用する。
+      直接7〜8桁の会員番号を入力した場合もそのまま使える。
+    */
+    if(looksLikeQr || /^\d{7,8}$/.test(cleanupScanNoise(raw))){
+      return current;
+    }
+
+    return "";
+  }
+
+  function captureHardwareScannerKey(e){
+    const now = (typeof performance !== "undefined" && performance.now)
+      ? performance.now()
+      : Date.now();
+
+    /*
+      0.4秒以上空いたら別入力として扱う。
+      スキャナーは通常かなり高速なので、手入力との混線を防げる。
+    */
+    if(lastHardwareKeyAt && (now - lastHardwareKeyAt) > 400){
+      hardwareDigitRun = "";
+      hardwareLastMember = "";
+    }
+    lastHardwareKeyAt = now;
+
+    let digit = "";
+
+    let m = String(e.code || "").match(/^Digit([0-9])$/);
+    if(m){
+      digit = m[1];
+    }else{
+      m = String(e.code || "").match(/^Numpad([0-9])$/);
+      if(m) digit = m[1];
+    }
+
+    if(digit){
+      hardwareDigitRun += digit;
+
+      /*
+        URL内のLIFF IDは10桁なので、ここではまだ会員番号確定にしない。
+        数字列が終わった時点で7〜8桁なら会員番号候補として保存する。
+      */
+      return;
+    }
+
+    if(/^\d{7,8}$/.test(hardwareDigitRun)){
+      hardwareLastMember = hardwareDigitRun;
+    }
+
+    hardwareDigitRun = "";
+  }
+
+  /*
+    capture=true でIME変換後の文字列とは別に物理キーを先に観測する。
+    入力文字そのものは従来どおりブラウザへ通す。
+  */
+  document.addEventListener("keydown", captureHardwareScannerKey, true);
+
   function resetInputOnly(){
     clearTimers();
     memberInput.value = "";
@@ -507,6 +598,7 @@ input[type="text"]:disabled{
     lastRawForTimer = "";
     lastHandledRaw = "";
     lastProcessedMember = "";
+    resetHardwareCapture();
     unlockInput();
   }
 
@@ -600,6 +692,17 @@ input[type="text"]:disabled{
   function extractMemberFromRaw(rawValue){
     const raw = cleanupScanNoise(rawValue);
     if(!raw) return "";
+
+    /*
+      最優先：
+      IMEが全角ONでも、スキャナーが実際に押したDigitキー列から
+      7〜8桁の会員番号を復元する。
+      これにより画面上の文字が別数字へ変換されても影響を受けない。
+    */
+    const hardwareMember = getHardwareCapturedMember(rawValue);
+    if(hardwareMember){
+      return hardwareMember;
+    }
 
     let decoded = raw;
     try{
