@@ -519,6 +519,14 @@ input[type="text"]:disabled{
   function normalizeRawInputForUrl(value){
     let s = String(value || "");
 
+    /*
+      全角英数字・全角記号をできるだけASCIIへ戻す。
+      NFKCで「１２３」「ｍｅｍｂｅｒ」なども通常の文字へ戻す。
+    */
+    try{
+      s = s.normalize("NFKC");
+    }catch(e){}
+
     s = toHalfWidthAscii(s);
 
     const map = {
@@ -590,17 +598,8 @@ input[type="text"]:disabled{
   }
 
   function extractMemberFromRaw(rawValue){
-    let raw = cleanupScanNoise(rawValue);
+    const raw = cleanupScanNoise(rawValue);
     if(!raw) return "";
-
-    try{
-      if(typeof normalizeMember === "function"){
-        const libResult = normalizeMember(raw);
-        if(libResult && !isIncompleteMember(libResult)){
-          return String(libResult).trim();
-        }
-      }
-    }catch(e){}
 
     let decoded = raw;
     try{
@@ -609,56 +608,73 @@ input[type="text"]:disabled{
 
     const candidates = [raw, decoded];
 
+    /*
+      重要：
+      URL内にはLIFF IDなど会員番号以外の数字も含まれる。
+      そのため「URLの途中にある7〜8桁」を推測では拾わない。
+      まず member の直後だけを最優先で取得する。
+    */
     for(const source0 of candidates){
-      let source = String(source0 || "");
+      const source = cleanupScanNoise(source0);
       if(!source) continue;
 
-      const lower = source.toLowerCase();
-
-      const m1 = source.match(/[?&]member=([A-Za-z0-9\-_]+)/i);
-      if(m1 && m1[1]){
-        return String(m1[1]).trim().toUpperCase();
+      const memberMatch = source.match(/member(?:=|:)?([A-Za-z0-9\-_]{3,})/i);
+      if(memberMatch && memberMatch[1]){
+        return String(memberMatch[1]).trim().toUpperCase();
       }
 
-      const m2 = source.match(/member=([A-Za-z0-9\-_]+)/i);
-      if(m2 && m2[1]){
-        return String(m2[1]).trim().toUpperCase();
-      }
-
-      const m3 = source.match(/member[^A-Za-z0-9]{0,5}([A-Za-z0-9\-_]{3,})/i);
-      if(m3 && m3[1]){
-        return String(m3[1]).trim().toUpperCase();
-      }
-
-      const m4 = source.match(/member([A-Za-z0-9\-_]{3,})/i);
-      if(m4 && m4[1]){
-        return String(m4[1]).trim().toUpperCase();
-      }
-
-      const idx = lower.indexOf("member");
+      const idx = source.toLowerCase().indexOf("member");
       if(idx >= 0){
-        const tail = source.slice(idx);
-        const m5 = tail.match(/(\d{7,8})(?!.*\d)/);
-        if(m5 && m5[1]){
-          return m5[1];
+        const tail = source.slice(idx + 6);
+
+        const numericAfterMember = tail.match(/^[^A-Za-z0-9]{0,8}(\d{7,8})(?:[^0-9]|$)/);
+        if(numericAfterMember && numericAfterMember[1]){
+          return numericAfterMember[1];
+        }
+
+        const tokenAfterMember = tail.match(/^[^A-Za-z0-9]{0,8}([A-Za-z0-9][A-Za-z0-9\-_]{2,})/);
+        if(tokenAfterMember && tokenAfterMember[1]){
+          return String(tokenAfterMember[1]).trim().toUpperCase();
         }
       }
+    }
 
-      const m6 = source.match(/(\d{7,8})(?!.*\d)/);
-      if(m6 && m6[1]){
-        return m6[1];
+    /*
+      QRではなく、会員番号そのものを直接スキャン・入力した場合。
+      全角数字も cleanupScanNoise() ですでに半角化されている。
+    */
+    for(const source0 of candidates){
+      const source = cleanupScanNoise(source0);
+      if(!source) continue;
+
+      if(/^\d{7,8}$/.test(source)){
+        return source;
       }
 
-      const onlyNum = source.replace(/\D/g, "");
-      if(/^\d{7,8}$/.test(onlyNum)){
-        return onlyNum;
+      if(/^[A-Za-z][A-Za-z0-9\-_]{2,}$/.test(source)){
+        return source.toUpperCase();
       }
+    }
 
-      const m7 = source.match(/^[A-Za-z0-9\-_]+$/);
-      if(m7){
-        const token = source.toUpperCase();
-        if(token.length >= MIN_VALID_LENGTH){
-          return token;
+    /*
+      member= の記号だけ落ちたQRへの救済。
+      会員番号がURLの「末尾」に7〜8桁で残っている場合だけ採用する。
+      URL途中の数字は絶対に採用しない。
+    */
+    for(const source0 of candidates){
+      const source = cleanupScanNoise(source0);
+      if(!source) continue;
+
+      const looksLikeQr =
+        /https?/i.test(source) ||
+        /liff/i.test(source) ||
+        /line/i.test(source) ||
+        source.length > 20;
+
+      if(looksLikeQr){
+        const trailingNumber = source.match(/(\d{7,8})$/);
+        if(trailingNumber && trailingNumber[1]){
+          return trailingNumber[1];
         }
       }
     }
