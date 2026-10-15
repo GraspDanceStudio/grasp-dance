@@ -361,10 +361,10 @@ input[type="text"]:disabled{
 
   /*
     Windowsの日本語IMEがONでも、スキャナーが送った「物理キーコード」から
-    数字だけを別経路で記録する。
-    画面上の文字が全角化・変換されても、会員番号の数字を壊さず取得するため。
+    member と会員番号を別経路で復元する。
+    画面上の文字が全角化・IME変換されても影響を受けない。
   */
-  let hardwareDigitRun = "";
+  let hardwareScanBuffer = "";
   let hardwareLastMember = "";
   let lastHardwareKeyAt = 0;
 
@@ -510,37 +510,52 @@ input[type="text"]:disabled{
   }
 
   function resetHardwareCapture(){
-    hardwareDigitRun = "";
+    hardwareScanBuffer = "";
     hardwareLastMember = "";
     lastHardwareKeyAt = 0;
   }
 
-  function getHardwareCapturedMember(rawValue){
-    const raw = String(rawValue || "");
-    const looksLikeQr =
-      /https?/i.test(raw) ||
-      /liff/i.test(raw) ||
-      /line/i.test(raw) ||
-      /member/i.test(raw) ||
-      raw.length > 20;
+  function appendHardwareSeparator(){
+    if(hardwareScanBuffer && !hardwareScanBuffer.endsWith("|")){
+      hardwareScanBuffer += "|";
+    }
+  }
 
-    const current =
-      /^\d{7,8}$/.test(hardwareDigitRun)
-        ? hardwareDigitRun
-        : (/^\d{7,8}$/.test(hardwareLastMember) ? hardwareLastMember : "");
-
-    if(!current) return "";
+  function parseHardwareMember(){
+    const s = String(hardwareScanBuffer || "").toUpperCase();
 
     /*
-      QRではURL中の別数字を誤採用しないため、
-      7〜8桁の物理キー連続列だけを採用する。
-      直接7〜8桁の会員番号を入力した場合もそのまま使える。
+      QRの本命：
+      物理キーで入力された MEMBER の直後にある7〜8桁だけを採用する。
+      記号は | に置き換えているので、IMEや全角設定の影響を受けない。
     */
-    if(looksLikeQr || /^\d{7,8}$/.test(cleanupScanNoise(raw))){
-      return current;
+    const memberMatch = s.match(/MEMBER\|*(\d{7,8})(?:\||$)/);
+    if(memberMatch && memberMatch[1]){
+      return memberMatch[1];
+    }
+
+    /*
+      会員番号そのものを直接スキャンした場合の救済。
+      URL中の数字を誤採用しないよう、バッファ全体が7〜8桁のときだけ採用。
+    */
+    const direct = s.replace(/\|+$/g, "");
+    if(/^\d{7,8}$/.test(direct)){
+      return direct;
     }
 
     return "";
+  }
+
+  function getHardwareCapturedMember(rawValue){
+    const parsed = parseHardwareMember();
+    if(parsed){
+      hardwareLastMember = parsed;
+      return parsed;
+    }
+
+    return /^\d{7,8}$/.test(hardwareLastMember)
+      ? hardwareLastMember
+      : "";
   }
 
   function captureHardwareScannerKey(e){
@@ -549,45 +564,75 @@ input[type="text"]:disabled{
       : Date.now();
 
     /*
-      0.4秒以上空いたら別入力として扱う。
-      スキャナーは通常かなり高速なので、手入力との混線を防げる。
+      スキャナー入力は高速。
+      0.4秒以上空いたら別の読み取りとしてリセットする。
     */
     if(lastHardwareKeyAt && (now - lastHardwareKeyAt) > 400){
-      hardwareDigitRun = "";
+      hardwareScanBuffer = "";
       hardwareLastMember = "";
     }
     lastHardwareKeyAt = now;
 
-    let digit = "";
+    const code = String(e.code || "");
 
-    let m = String(e.code || "").match(/^Digit([0-9])$/);
-    if(m){
-      digit = m[1];
-    }else{
-      m = String(e.code || "").match(/^Numpad([0-9])$/);
-      if(m) digit = m[1];
-    }
-
-    if(digit){
-      hardwareDigitRun += digit;
-
-      /*
-        URL内のLIFF IDは10桁なので、ここではまだ会員番号確定にしない。
-        数字列が終わった時点で7〜8桁なら会員番号候補として保存する。
-      */
+    /*
+      Shift/Ctrl/Altなどの修飾キー自体は文字として扱わない。
+    */
+    if(
+      code === "ShiftLeft" || code === "ShiftRight" ||
+      code === "ControlLeft" || code === "ControlRight" ||
+      code === "AltLeft" || code === "AltRight" ||
+      code === "MetaLeft" || code === "MetaRight"
+    ){
       return;
     }
 
-    if(/^\d{7,8}$/.test(hardwareDigitRun)){
-      hardwareLastMember = hardwareDigitRun;
+    /*
+      英字は物理キー位置から直接復元。
+      member の文字列検出に使うのでIME状態に左右されない。
+    */
+    let m = code.match(/^Key([A-Z])$/);
+    if(m){
+      hardwareScanBuffer += m[1];
+      return;
     }
 
-    hardwareDigitRun = "";
+    /*
+      数字は Shift が押されていないときだけ採用。
+      Shift+Digit は ! や " などの記号入力なので、
+      数字として拾うと「余分な1桁」が混ざる原因になる。
+    */
+    m = code.match(/^Digit([0-9])$/);
+    if(m){
+      if(e.shiftKey){
+        appendHardwareSeparator();
+      }else{
+        hardwareScanBuffer += m[1];
+      }
+      return;
+    }
+
+    m = code.match(/^Numpad([0-9])$/);
+    if(m){
+      hardwareScanBuffer += m[1];
+      return;
+    }
+
+    /*
+      URLの / : ? = - などは全部区切りとして扱う。
+      実際の記号を復元する必要はなく、
+      MEMBER とその後の数字だけ分かれば十分。
+    */
+    appendHardwareSeparator();
+
+    const parsed = parseHardwareMember();
+    if(parsed){
+      hardwareLastMember = parsed;
+    }
   }
 
   /*
-    capture=true でIME変換後の文字列とは別に物理キーを先に観測する。
-    入力文字そのものは従来どおりブラウザへ通す。
+    capture=true でIME変換前の物理キーを先に観測する。
   */
   document.addEventListener("keydown", captureHardwareScannerKey, true);
 
