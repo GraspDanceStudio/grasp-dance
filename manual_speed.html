@@ -359,15 +359,6 @@ input[type="text"]:disabled{
   let lastRawForTimer = "";
   let lastHandledRaw = "";
 
-  /*
-    Windowsの日本語IMEがONでも、スキャナーが送った「物理キーコード」から
-    member と会員番号を別経路で復元する。
-    画面上の文字が全角化・IME変換されても影響を受けない。
-  */
-  let hardwareScanBuffer = "";
-  let hardwareLastMember = "";
-  let lastHardwareKeyAt = 0;
-
   function setStatus(text){
     statusBox.textContent = text;
   }
@@ -509,133 +500,6 @@ input[type="text"]:disabled{
     }
   }
 
-  function resetHardwareCapture(){
-    hardwareScanBuffer = "";
-    hardwareLastMember = "";
-    lastHardwareKeyAt = 0;
-  }
-
-  function appendHardwareSeparator(){
-    if(hardwareScanBuffer && !hardwareScanBuffer.endsWith("|")){
-      hardwareScanBuffer += "|";
-    }
-  }
-
-  function parseHardwareMember(){
-    const s = String(hardwareScanBuffer || "").toUpperCase();
-
-    /*
-      QRの本命：
-      物理キーで入力された MEMBER の直後にある7〜8桁だけを採用する。
-      記号は | に置き換えているので、IMEや全角設定の影響を受けない。
-    */
-    const memberMatch = s.match(/MEMBER\|*(\d{7,8})(?:\||$)/);
-    if(memberMatch && memberMatch[1]){
-      return memberMatch[1];
-    }
-
-    /*
-      会員番号そのものを直接スキャンした場合の救済。
-      URL中の数字を誤採用しないよう、バッファ全体が7〜8桁のときだけ採用。
-    */
-    const direct = s.replace(/\|+$/g, "");
-    if(/^\d{7,8}$/.test(direct)){
-      return direct;
-    }
-
-    return "";
-  }
-
-  function getHardwareCapturedMember(rawValue){
-    const parsed = parseHardwareMember();
-    if(parsed){
-      hardwareLastMember = parsed;
-      return parsed;
-    }
-
-    return /^\d{7,8}$/.test(hardwareLastMember)
-      ? hardwareLastMember
-      : "";
-  }
-
-  function captureHardwareScannerKey(e){
-    const now = (typeof performance !== "undefined" && performance.now)
-      ? performance.now()
-      : Date.now();
-
-    /*
-      スキャナー入力は高速。
-      0.4秒以上空いたら別の読み取りとしてリセットする。
-    */
-    if(lastHardwareKeyAt && (now - lastHardwareKeyAt) > 400){
-      hardwareScanBuffer = "";
-      hardwareLastMember = "";
-    }
-    lastHardwareKeyAt = now;
-
-    const code = String(e.code || "");
-
-    /*
-      Shift/Ctrl/Altなどの修飾キー自体は文字として扱わない。
-    */
-    if(
-      code === "ShiftLeft" || code === "ShiftRight" ||
-      code === "ControlLeft" || code === "ControlRight" ||
-      code === "AltLeft" || code === "AltRight" ||
-      code === "MetaLeft" || code === "MetaRight"
-    ){
-      return;
-    }
-
-    /*
-      英字は物理キー位置から直接復元。
-      member の文字列検出に使うのでIME状態に左右されない。
-    */
-    let m = code.match(/^Key([A-Z])$/);
-    if(m){
-      hardwareScanBuffer += m[1];
-      return;
-    }
-
-    /*
-      数字は Shift が押されていないときだけ採用。
-      Shift+Digit は ! や " などの記号入力なので、
-      数字として拾うと「余分な1桁」が混ざる原因になる。
-    */
-    m = code.match(/^Digit([0-9])$/);
-    if(m){
-      if(e.shiftKey){
-        appendHardwareSeparator();
-      }else{
-        hardwareScanBuffer += m[1];
-      }
-      return;
-    }
-
-    m = code.match(/^Numpad([0-9])$/);
-    if(m){
-      hardwareScanBuffer += m[1];
-      return;
-    }
-
-    /*
-      URLの / : ? = - などは全部区切りとして扱う。
-      実際の記号を復元する必要はなく、
-      MEMBER とその後の数字だけ分かれば十分。
-    */
-    appendHardwareSeparator();
-
-    const parsed = parseHardwareMember();
-    if(parsed){
-      hardwareLastMember = parsed;
-    }
-  }
-
-  /*
-    capture=true でIME変換前の物理キーを先に観測する。
-  */
-  document.addEventListener("keydown", captureHardwareScannerKey, true);
-
   function resetInputOnly(){
     clearTimers();
     memberInput.value = "";
@@ -643,7 +507,6 @@ input[type="text"]:disabled{
     lastRawForTimer = "";
     lastHandledRaw = "";
     lastProcessedMember = "";
-    resetHardwareCapture();
     unlockInput();
   }
 
@@ -655,14 +518,6 @@ input[type="text"]:disabled{
 
   function normalizeRawInputForUrl(value){
     let s = String(value || "");
-
-    /*
-      全角英数字・全角記号をできるだけASCIIへ戻す。
-      NFKCで「１２３」「ｍｅｍｂｅｒ」なども通常の文字へ戻す。
-    */
-    try{
-      s = s.normalize("NFKC");
-    }catch(e){}
 
     s = toHalfWidthAscii(s);
 
@@ -735,19 +590,17 @@ input[type="text"]:disabled{
   }
 
   function extractMemberFromRaw(rawValue){
-    const raw = cleanupScanNoise(rawValue);
+    let raw = cleanupScanNoise(rawValue);
     if(!raw) return "";
 
-    /*
-      最優先：
-      IMEが全角ONでも、スキャナーが実際に押したDigitキー列から
-      7〜8桁の会員番号を復元する。
-      これにより画面上の文字が別数字へ変換されても影響を受けない。
-    */
-    const hardwareMember = getHardwareCapturedMember(rawValue);
-    if(hardwareMember){
-      return hardwareMember;
-    }
+    try{
+      if(typeof normalizeMember === "function"){
+        const libResult = normalizeMember(raw);
+        if(libResult && !isIncompleteMember(libResult)){
+          return String(libResult).trim();
+        }
+      }
+    }catch(e){}
 
     let decoded = raw;
     try{
@@ -756,73 +609,56 @@ input[type="text"]:disabled{
 
     const candidates = [raw, decoded];
 
-    /*
-      重要：
-      URL内にはLIFF IDなど会員番号以外の数字も含まれる。
-      そのため「URLの途中にある7〜8桁」を推測では拾わない。
-      まず member の直後だけを最優先で取得する。
-    */
     for(const source0 of candidates){
-      const source = cleanupScanNoise(source0);
+      let source = String(source0 || "");
       if(!source) continue;
 
-      const memberMatch = source.match(/member(?:=|:)?([A-Za-z0-9\-_]{3,})/i);
-      if(memberMatch && memberMatch[1]){
-        return String(memberMatch[1]).trim().toUpperCase();
+      const lower = source.toLowerCase();
+
+      const m1 = source.match(/[?&]member=([A-Za-z0-9\-_]+)/i);
+      if(m1 && m1[1]){
+        return String(m1[1]).trim().toUpperCase();
       }
 
-      const idx = source.toLowerCase().indexOf("member");
+      const m2 = source.match(/member=([A-Za-z0-9\-_]+)/i);
+      if(m2 && m2[1]){
+        return String(m2[1]).trim().toUpperCase();
+      }
+
+      const m3 = source.match(/member[^A-Za-z0-9]{0,5}([A-Za-z0-9\-_]{3,})/i);
+      if(m3 && m3[1]){
+        return String(m3[1]).trim().toUpperCase();
+      }
+
+      const m4 = source.match(/member([A-Za-z0-9\-_]{3,})/i);
+      if(m4 && m4[1]){
+        return String(m4[1]).trim().toUpperCase();
+      }
+
+      const idx = lower.indexOf("member");
       if(idx >= 0){
-        const tail = source.slice(idx + 6);
-
-        const numericAfterMember = tail.match(/^[^A-Za-z0-9]{0,8}(\d{7,8})(?:[^0-9]|$)/);
-        if(numericAfterMember && numericAfterMember[1]){
-          return numericAfterMember[1];
-        }
-
-        const tokenAfterMember = tail.match(/^[^A-Za-z0-9]{0,8}([A-Za-z0-9][A-Za-z0-9\-_]{2,})/);
-        if(tokenAfterMember && tokenAfterMember[1]){
-          return String(tokenAfterMember[1]).trim().toUpperCase();
+        const tail = source.slice(idx);
+        const m5 = tail.match(/(\d{7,8})(?!.*\d)/);
+        if(m5 && m5[1]){
+          return m5[1];
         }
       }
-    }
 
-    /*
-      QRではなく、会員番号そのものを直接スキャン・入力した場合。
-      全角数字も cleanupScanNoise() ですでに半角化されている。
-    */
-    for(const source0 of candidates){
-      const source = cleanupScanNoise(source0);
-      if(!source) continue;
-
-      if(/^\d{7,8}$/.test(source)){
-        return source;
+      const m6 = source.match(/(\d{7,8})(?!.*\d)/);
+      if(m6 && m6[1]){
+        return m6[1];
       }
 
-      if(/^[A-Za-z][A-Za-z0-9\-_]{2,}$/.test(source)){
-        return source.toUpperCase();
+      const onlyNum = source.replace(/\D/g, "");
+      if(/^\d{7,8}$/.test(onlyNum)){
+        return onlyNum;
       }
-    }
 
-    /*
-      member= の記号だけ落ちたQRへの救済。
-      会員番号がURLの「末尾」に7〜8桁で残っている場合だけ採用する。
-      URL途中の数字は絶対に採用しない。
-    */
-    for(const source0 of candidates){
-      const source = cleanupScanNoise(source0);
-      if(!source) continue;
-
-      const looksLikeQr =
-        /https?/i.test(source) ||
-        /liff/i.test(source) ||
-        /line/i.test(source) ||
-        source.length > 20;
-
-      if(looksLikeQr){
-        const trailingNumber = source.match(/(\d{7,8})$/);
-        if(trailingNumber && trailingNumber[1]){
-          return trailingNumber[1];
+      const m7 = source.match(/^[A-Za-z0-9\-_]+$/);
+      if(m7){
+        const token = source.toUpperCase();
+        if(token.length >= MIN_VALID_LENGTH){
+          return token;
         }
       }
     }
