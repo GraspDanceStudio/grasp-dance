@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <title>受付（曜日切替・自動送信）</title>
 
-<script src="./shared.js?v=20260501-3"></script>
+<script src="./shared.js?v=20261023-1"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
@@ -847,6 +847,15 @@ input[type="text"]:disabled{
 
       await submitFixedClass(member, submitClassName);
 
+      /*
+        Google Sheetsへの反映に少し時間がかかる場合でも、
+        直後の同一会員・同一クラス再受付をローカルで即ブロックする。
+        既存のLOCAL_PENDING_MINUTES設定を使用する。
+      */
+      if(typeof window.addLocalPendingDuplicateClasses === "function"){
+        window.addLocalPendingDuplicateClasses(member, [submitClassName]);
+      }
+
       sendMonitor({
         class: submitClassName,
         raw: rawValue,
@@ -945,37 +954,39 @@ input[type="text"]:disabled{
 
       if(inputTimer){
         clearTimeout(inputTimer);
+        inputTimer = null;
       }
 
-      inputTimer = setTimeout(async () => {
-        if(submitting) return;
+      const currentRaw = cleanupScanNoise(memberInput.value);
 
-        const currentRaw = cleanupScanNoise(memberInput.value);
+      if(currentRaw !== lastRawForTimer && lastRawForTimer !== ""){
+        return;
+      }
 
-        if(currentRaw !== lastRawForTimer && lastRawForTimer !== ""){
-          return;
-        }
+      if(currentRaw === lastHandledRaw){
+        return;
+      }
 
-        if(currentRaw === lastHandledRaw){
-          return;
-        }
+      const currentMember = extractMemberFromRaw(currentRaw);
+      updateScanDebug(currentRaw, currentMember);
 
-        const currentMember = extractMemberFromRaw(currentRaw);
-        updateScanDebug(currentRaw, currentMember);
+      if(!currentMember){
+        setStatus("読み取り中…");
+        return;
+      }
 
-        if(!currentMember){
-          setStatus("読み取り中…");
-          return;
-        }
+      if(isIncompleteMember(currentMember)){
+        setStatus("読み取り不完全");
+        return;
+      }
 
-        if(isIncompleteMember(currentMember)){
-          setStatus("読み取り不完全");
-          return;
-        }
+      lastHandledRaw = currentRaw;
 
-        lastHandledRaw = currentRaw;
-        await processReception(currentRaw);
-      }, INPUT_SETTLE_MS);
+      /*
+        スキャナーは末尾Enterを送るため、ここでは待たずに即受付処理へ進む。
+        Enterが来ない手入力・機器向けには、input側のINPUT_SETTLE_MSを従来どおり残す。
+      */
+      void processReception(currentRaw);
     }
   });
 
