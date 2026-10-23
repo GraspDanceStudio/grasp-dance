@@ -637,8 +637,20 @@
   };
 
   window.checkDuplicate = async function(member, className, forceRefresh = false){
+    const normalizedClass = normalizeClassName(className);
+
+    /*
+      ローカルで受付済みと確定している場合は即重複扱い。
+      ローカルに記録が無い場合は、従来どおりGoogle側を確認する。
+      そのため二重受付防止の安全性は落とさない。
+    */
+    const localSet = getLocalPendingDuplicateSet(member);
+    if(localSet.has(normalizedClass)){
+      return true;
+    }
+
     const duplicates = await window.getTodayDuplicateClasses(member, [className], forceRefresh);
-    return duplicates.includes(normalizeClassName(className));
+    return duplicates.includes(normalizedClass);
   };
 
   function getCurrentMemberForDuplicateCheck(){
