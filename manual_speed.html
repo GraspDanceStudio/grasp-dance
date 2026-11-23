@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <title>受付（曜日切替・自動送信）</title>
 
-<script src="./shared.js?v=20261023-1"></script>
+<script src="./shared.js?v=20261123-1"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
@@ -810,11 +810,12 @@ input[type="text"]:disabled{
       setStatus("受付済み確認中…");
 
       /*
-        重要：
-        manual_speedは連続受付で前の会員のキャッシュを握ると危険なので、
-        重複チェックは forceRefresh=true で毎回最新ログを確認する。
+        高速受付：
+        Google側の「今日の受付一覧」は事前取得・定期更新した全体キャッシュを使う。
+        受付直後の同一会員・同一クラスはローカルpendingで即ブロックするため、
+        スキャンごとにGoogleの返答を待たない。
       */
-      const duplicate = await checkDuplicate(member, submitClassName, true);
+      const duplicate = await checkDuplicate(member, submitClassName, false);
 
       if(duplicate){
         sendMonitor({
@@ -854,6 +855,11 @@ input[type="text"]:disabled{
       */
       if(typeof window.addLocalPendingDuplicateClasses === "function"){
         window.addLocalPendingDuplicateClasses(member, [submitClassName]);
+      }
+
+      /* Google側の最新状態は裏で更新。ここでは待たない。 */
+      if(typeof window.refreshTodayDuplicateIndex === "function"){
+        void window.refreshTodayDuplicateIndex(true);
       }
 
       sendMonitor({
@@ -1010,6 +1016,14 @@ input[type="text"]:disabled{
   setStatus("読み取り待機中");
   unlockInput();
   keepInputFocus();
+
+  /*
+    ページ起動時に「今日の受付一覧」を先読みし、
+    以後5秒ごとに裏で更新する。
+  */
+  if(typeof window.startDuplicatePrefetch === "function"){
+    window.startDuplicatePrefetch(5000);
+  }
 
 })();
 </script>
