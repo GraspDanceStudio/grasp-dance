@@ -30,6 +30,19 @@
 
   let duplicateCacheMap = {};
 
+  /*
+    manual_speed高速化用：
+    「今日の受付一覧」は会員ごとに同じデータを毎回取り直さず、
+    1つの全体キャッシュとして保持する。
+  */
+  let todayDuplicateIndexCache = {
+    date: "",
+    map: new Map(),
+    fetchedAt: 0,
+    promise: null
+  };
+  let duplicatePrefetchTimer = null;
+
   const LOCAL_PENDING_STORAGE_KEY = "dance_accept_pending_duplicates_v1";
 
   function loadLocalPendingDuplicateMap(){
@@ -514,12 +527,9 @@
     saveLocalPendingDuplicateMap(localPendingDuplicateMap);
   };
 
-  async function fetchTodayRemoteDuplicateClassSet(member){
-    const cleanMember = window.normalizeMember(member);
+  async function fetchTodayRemoteDuplicateIndex(){
     const today = window.getTokyoTodayString();
-    const duplicateSet = new Set();
-
-    if(!cleanMember) return duplicateSet;
+    const index = new Map();
 
     const tq =
       "select B,C,D where D='" +
@@ -547,62 +557,92 @@
 
         if(!cls) return;
         if(date !== today) return;
-        if(!isSameMemberId(rawMember, cleanMember)) return;
 
-        duplicateSet.add(cls);
+        const memberKey = getMemberCompareKey(rawMember);
+        if(!memberKey) return;
+
+        if(!index.has(memberKey)){
+          index.set(memberKey, new Set());
+        }
+        index.get(memberKey).add(cls);
       });
 
     }catch(e){
-      console.log("fetchTodayRemoteDuplicateClassSet error:", e);
+      console.log("fetchTodayRemoteDuplicateIndex error:", e);
+      throw e;
     }
 
-    return duplicateSet;
+    return { date: today, map: index };
   }
 
-  window.getTodayRemoteDuplicateClassSet = async function(member, forceRefresh = false){
-    const cleanMember = window.normalizeMember(member);
+  window.refreshTodayDuplicateIndex = async function(forceRefresh = false){
     const today = window.getTokyoTodayString();
-    const cacheKey = getDuplicateCacheKey(getMemberCompareKey(cleanMember), today);
     const now = Date.now();
-    const cacheMs = Number(window.APP_CONFIG.DUPLICATE_CACHE_MS || 0);
-    const cached = duplicateCacheMap[cacheKey];
+    const cacheMs = Number(window.APP_CONFIG.DUPLICATE_CACHE_MS || 10000);
+
+    if(todayDuplicateIndexCache.date !== today){
+      todayDuplicateIndexCache = {
+        date: today,
+        map: new Map(),
+        fetchedAt: 0,
+        promise: null
+      };
+    }
 
     if(
       !forceRefresh &&
-      cached &&
-      cached.set instanceof Set &&
-      cached.fetchedAt &&
-      (now - cached.fetchedAt) < cacheMs
+      todayDuplicateIndexCache.fetchedAt &&
+      (now - todayDuplicateIndexCache.fetchedAt) < cacheMs
     ){
-      return new Set(cached.set);
+      return todayDuplicateIndexCache.map;
     }
 
-    if(!forceRefresh && cached && cached.promise){
-      return cached.promise.then(set => new Set(set));
+    if(todayDuplicateIndexCache.promise){
+      return todayDuplicateIndexCache.promise;
     }
 
-    duplicateCacheMap[cacheKey] = duplicateCacheMap[cacheKey] || {};
-
-    duplicateCacheMap[cacheKey].promise = fetchTodayRemoteDuplicateClassSet(cleanMember)
-      .then(set => {
-        duplicateCacheMap[cacheKey] = {
-          set: new Set(set),
+    todayDuplicateIndexCache.promise = fetchTodayRemoteDuplicateIndex()
+      .then(result => {
+        todayDuplicateIndexCache = {
+          date: result.date,
+          map: result.map,
           fetchedAt: Date.now(),
           promise: null
         };
-        return new Set(set);
+        return todayDuplicateIndexCache.map;
       })
       .catch(e => {
-        console.log("getTodayRemoteDuplicateClassSet error", e);
-        duplicateCacheMap[cacheKey] = {
-          set: new Set(),
-          fetchedAt: 0,
-          promise: null
-        };
-        return new Set();
+        console.log("refreshTodayDuplicateIndex error", e);
+        todayDuplicateIndexCache.promise = null;
+        return todayDuplicateIndexCache.map;
       });
 
-    return duplicateCacheMap[cacheKey].promise.then(set => new Set(set));
+    return todayDuplicateIndexCache.promise;
+  };
+
+  window.startDuplicatePrefetch = function(intervalMs = 5000){
+    /* 初回は裏で先読み。スキャン処理自体はブロックしない。 */
+    void window.refreshTodayDuplicateIndex(true);
+
+    if(duplicatePrefetchTimer){
+      clearInterval(duplicatePrefetchTimer);
+    }
+
+    duplicatePrefetchTimer = setInterval(() => {
+      void window.refreshTodayDuplicateIndex(true);
+    }, Math.max(3000, Number(intervalMs) || 5000));
+  };
+
+  window.getTodayRemoteDuplicateClassSet = async function(member, forceRefresh = false){
+    const cleanMember = window.normalizeMember(member);
+    const memberKey = getMemberCompareKey(cleanMember);
+
+    if(!memberKey) return new Set();
+
+    const index = await window.refreshTodayDuplicateIndex(forceRefresh);
+    const set = index.get(memberKey);
+
+    return set ? new Set(set) : new Set();
   };
 
   window.getTodayDuplicateClassSet = async function(member, forceRefresh = false){
